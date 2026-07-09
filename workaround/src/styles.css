@@ -1,0 +1,73 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-cantarell: 'Cantarell', 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-syne: 'Syne Mono', ui-monospace, monospace;
+
+  /* Neutral light palette — paper white, cool ink, indigo accent */
+  --color-background: oklch(99% 0 0);
+  --color-foreground: oklch(21% 0.006 265);
+  --color-card: oklch(100% 0 0);
+  --color-muted: oklch(96.5% 0.002 265);
+  --color-muted-foreground: oklch(50% 0.01 265);
+  --color-faint: oklch(63% 0.008 265);
+  --color-border: oklch(91.5% 0.004 265);
+  --color-input: oklch(87.5% 0.005 265);
+
+  --color-primary: oklch(23% 0.008 265);
+  --color-primary-foreground: oklch(99% 0 0);
+
+  --color-accent: oklch(56% 0.17 268); /* indigo */
+  --color-accent-strong: oklch(46% 0.17 268);
+  --color-accent-soft: oklch(95.5% 0.022 268);
+
+  --color-destructive: oklch(54% 0.17 27);
+  --color-destructive-soft: oklch(96% 0.02 27);
+
+  --color-keep: oklch(52% 0.12 155);
+  --color-keep-soft: oklch(96% 0.03 155);
+
+  --color-ring: oklch(56% 0.17 268);
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+
+  ::selection {
+    background: oklch(91% 0.045 268);
+  }
+}
+
+@layer utilities {
+  .rise-in {
+    animation: rise-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rise-in {
+      animation: none;
+    }
+  }
+}

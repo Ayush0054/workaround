@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "workaround-dev",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd workaround && npx vite dev --port 3123"],
+      "port": 3123,
+      "autoPort": false
+    }
+  ]
+}
