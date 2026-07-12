@@ -1,8 +1,8 @@
 # Workaround ⭐️🧹
 
-Tidy your GitHub stars. Workaround lists every repo you've starred, flags the dead weight, lets Claude argue about the judgment calls, and sweeps your selection in the background — it can even find repos for you from a plain-English description.
+Tidy your GitHub stars. Workaround lists every repo you've starred, flags the dead weight, lets Claude argue about the judgment calls, and sweeps your selection in one go — it can even find repos for you from a plain-English description.
 
-**Stack:** TanStack Start (SSR) · Cloudflare Workers + Queues + D1 · Tailwind v4 (shadcn-style tokens, light mode) · Anthropic API via Cloudflare AI Gateway · Geist / Geist Mono / Cantarell / Syne Mono.
+**Stack:** TanStack Start (SSR) · Cloudflare Workers · Tailwind v4 (shadcn-style tokens, light mode) · Anthropic API via Cloudflare AI Gateway · Geist / Geist Mono / Cantarell / Syne Mono.
 
 ## Features
 
@@ -13,14 +13,13 @@ Tidy your GitHub stars. Workaround lists every repo you've starred, flags the de
   - *All GitHub* — Claude translates the description into a GitHub search query and surfaces non-starred repos you can star in one click (works without an API key too — falls back to raw GitHub search)
   - *Both* — runs the two in parallel
 - **Repo pages** — click any row to open `/repo/owner/name` in a new tab: stats, topics, license, and the README as GitHub renders it, plus star/unstar.
-- **Background sweeps (sync engine)** — GitHub has no bulk-unstar endpoint, so bulk unstars are enqueued to Cloudflare Queues (one message per repo, your token AES-GCM-encrypted inside) and drained server-side with retries and backoff. Per-repo status lands in D1; the UI updates optimistically, polls progress, and resumes unfinished sweeps on your next visit. Closing the tab doesn't stop a sweep. Without the queue/D1 bindings the app falls back to a client-side pool.
+- **Bulk sweeps** — GitHub has no bulk-unstar endpoint and rate-limits bursts of writes (~80/min, no concurrency), so sweeps run serially at ~1 unstar/second. Rows disappear as they're unstarred; failures stay in the list with a notice. Keep the tab open during a sweep.
 
 ## How it works
 
 - **Auth** — GitHub OAuth (authorization-code flow with state check). The access token lives in an encrypted, HttpOnly session cookie (TanStack Start's `useSession`) — no user database.
 - **Stars** — fetched from `GET /user/starred` with the `application/vnd.github.star+json` media type so we get `starred_at` timestamps. Paginated 100/page, capped at 3,000 stars (Workers subrequest limits); the UI shows a notice when truncated.
 - **AI calls** — all Anthropic traffic can route through Cloudflare AI Gateway (`AI_GATEWAY_URL`), which adds caching, rate limiting, and spend observability for free.
-- **Worker entry** — [src/worker.ts](src/worker.ts) exports both the TanStack Start `fetch` handler and the `queue` consumer, so the whole app is still a single Worker.
 
 ## Setup
 
@@ -59,18 +58,7 @@ npm install
 npm run dev          # http://localhost:3000
 ```
 
-Queues and D1 are simulated locally by the Cloudflare Vite plugin, and the sweep tables create themselves — background sweeps work in dev with zero extra setup.
-
 ### 4. Deploy
-
-One-time infra for the sweep engine (Queues needs the Workers Paid plan):
-
-```sh
-npx wrangler queues create workaround-unstar
-npx wrangler d1 create workaround   # paste the returned database_id into wrangler.jsonc
-```
-
-Then secrets and deploy:
 
 ```sh
 npx wrangler secret put GITHUB_CLIENT_ID
@@ -86,10 +74,9 @@ Then add `https://<your-worker>.workers.dev/api/auth/callback` as a callback URL
 
 ```
 src/
-  worker.ts                    worker entry: TanStack Start fetch + queue consumer
   routes/
     index.tsx                  landing (redirects to /dashboard when signed in)
-    dashboard.tsx              star list, filters, AI review, NLP search, sweeps
+    dashboard.tsx              star list, filters, AI review, NLP search, bulk sweep
     repo.$owner.$name.tsx      repo detail page (stats, topics, README)
     api/auth/{login,callback,logout}.ts   OAuth server routes
   server/
@@ -97,8 +84,6 @@ src/
     session.ts                 encrypted cookie session
     github.ts                  GitHub REST client (stars, unstar, search, repo, README)
     suggest.ts                 heuristics + Claude review + semantic search + NL→query
-    sweep.ts                   Queues+D1 sweep engine (enqueue, consumer, status, resume)
-    crypto.ts                  AES-GCM sealing for tokens inside queue messages
   lib/functions.ts             server functions (the RPC boundary)
   components/                  shadcn-style primitives + RepoRow
   styles.css                   design tokens (neutral light palette, fonts)
@@ -110,7 +95,8 @@ Light mode only, neutral grays on white with an indigo accent — tokens live in
 
 ## Roadmap ideas
 
-- Cache star snapshots in D1 so revisits don't re-paginate GitHub
+- Cache star snapshots in KV/D1 so revisits don't re-paginate GitHub
 - Cluster duplicates ("you starred 6 HTTP clients") in the AI pass
-- Undo window before a sweep starts draining; export stars before sweeping
+- Server-side sweep queue (Cloudflare Queues / Durable Objects) if sweeps ever need to outlive the tab
+- Undo window before a sweep starts; export stars before sweeping
 - Lists/tags for organizing keepers

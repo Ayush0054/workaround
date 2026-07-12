@@ -12,8 +12,6 @@ import {
 } from '#/server/github'
 import { getAppSession } from '#/server/session'
 import { aiConfigured, aiReview, scoreRepos, semanticMatch, toSearchQuery } from '#/server/suggest'
-import { activeSweeps, enqueueSweep, queueConfigured, sweepStatus } from '#/server/sweep'
-import type { SweepTarget } from '#/server/sweep'
 import type { CandidatePayload, CompactRepo } from '#/server/suggest'
 
 async function requireToken(): Promise<string> {
@@ -47,7 +45,6 @@ export const getStars = createServerFn({ method: 'GET' }).handler(async () => {
     repos: scoreRepos(repos),
     truncated,
     aiEnabled: aiConfigured(),
-    queueEnabled: queueConfigured(),
   }
 })
 
@@ -111,35 +108,3 @@ export const getRepoInfo = createServerFn({ method: 'GET' })
     ])
     return { repo, readmeHtml, starred }
   })
-
-const MAX_SWEEP_TARGETS = 3000
-
-export const startSweep = createServerFn({ method: 'POST' })
-  .validator((data: { targets: SweepTarget[] }) => data)
-  .handler(async ({ data }) => {
-    const session = await getAppSession()
-    const token = session.data.token
-    const login = session.data.login
-    if (!token || !login) throw new Error('Not signed in')
-
-    return enqueueSweep(login, token, data.targets.slice(0, MAX_SWEEP_TARGETS))
-  })
-
-export const getSweepStatus = createServerFn({ method: 'POST' })
-  .validator((data: { jobId: string }) => data)
-  .handler(async ({ data }) => {
-    const session = await getAppSession()
-    const login = session.data.login
-    if (!login) throw new Error('Not signed in')
-
-    const status = await sweepStatus(login, data.jobId)
-    if (!status) throw new Error('Unknown sweep job')
-    return status
-  })
-
-export const getActiveSweeps = createServerFn({ method: 'GET' }).handler(async () => {
-  const session = await getAppSession()
-  const login = session.data.login
-  if (!login) return []
-  return activeSweeps(login)
-})

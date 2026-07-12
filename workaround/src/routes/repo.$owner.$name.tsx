@@ -12,6 +12,7 @@ export const Route = createFileRoute('/repo/$owner/$name')({
     if (!auth) throw redirect({ to: '/' })
   },
   loader: ({ params }) => getRepoInfo({ data: { owner: params.owner, name: params.name } }),
+  staleTime: 5 * 60 * 1000,
   component: RepoPage,
 })
 

@@ -9,37 +9,11 @@
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
-	"main": "src/worker.ts",
+	"main": "@tanstack/react-start/server-entry",
 	"observability": {
 		"enabled": true
 	},
-	"upload_source_maps": true,
-	/**
-	 * Background sweep engine: bulk unstars are enqueued here and drained by
-	 * the queue consumer below; job progress is tracked in D1.
-	 * Deploy setup: `npx wrangler queues create workaround-unstar` and
-	 * `npx wrangler d1 create workaround` (paste the returned database_id).
-	 */
-	"queues": {
-		"producers": [
-			{ "binding": "UNSTAR_QUEUE", "queue": "workaround-unstar" }
-		],
-		"consumers": [
-			{
-				"queue": "workaround-unstar",
-				"max_batch_size": 10,
-				"max_batch_timeout": 5,
-				"max_retries": 3
-			}
-		]
-	},
-	"d1_databases": [
-		{
-			"binding": "DB",
-			"database_name": "workaround",
-			"database_id": "REPLACE_WITH_WRANGLER_D1_CREATE_OUTPUT"
-		}
-	]
+	"upload_source_maps": true
 	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement

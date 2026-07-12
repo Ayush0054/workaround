@@ -1,23 +1,12 @@
-import { createFileRoute, redirect } from '@tanstack/react-router'
-import { Github, Loader2, Search, Sparkles, Star, Trash2, WandSparkles, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
+import { Github, Loader2, RefreshCw, Search, Sparkles, Star, Trash2, WandSparkles, X } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
 import { RepoRow } from '#/components/RepoRow'
 import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
 import { Checkbox } from '#/components/ui/checkbox'
 import { Input } from '#/components/ui/input'
-import {
-  analyzeStars,
-  getActiveSweeps,
-  getAuth,
-  getStars,
-  getSweepStatus,
-  searchGithub,
-  semanticFilterStars,
-  star,
-  startSweep,
-  unstar,
-} from '#/lib/functions'
+import { analyzeStars, getAuth, getStars, searchGithub, semanticFilterStars, star, unstar } from '#/lib/functions'
 import { cn, formatCount, timeAgo } from '#/lib/utils'
 import type { SearchResult } from '#/server/github'
 import type { AiVerdict, ScoredRepo } from '#/server/suggest'
@@ -29,28 +18,27 @@ export const Route = createFileRoute('/dashboard')({
     return { auth }
   },
   loader: () => getStars(),
+  // Star fetching walks the whole paginated list on GitHub — reuse it for a
+  // few minutes instead of re-fetching on every navigation (manual ⟳ to force).
+  staleTime: 5 * 60 * 1000,
   component: Dashboard,
 })
 
 type Filter = 'all' | 'flagged' | 'ai' | 'nlp'
 type Scope = 'starred' | 'github' | 'both'
 
-const UNSTAR_CONCURRENCY = 4
+/**
+ * GitHub's secondary rate limit rejects concurrent/bursty writes, so sweeps
+ * run serially with ~1 unstar per second — their documented guidance.
+ */
+const UNSTAR_PACING_MS = 1000
 
-async function runPool<T>(items: T[], worker: (item: T) => Promise<void>, concurrency: number) {
-  const queue = [...items]
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
-      for (let item = queue.shift(); item !== undefined; item = queue.shift()) {
-        await worker(item)
-      }
-    }),
-  )
-}
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function Dashboard() {
+  const router = useRouter()
   const { auth } = Route.useRouteContext()
-  const { repos, truncated, aiEnabled, queueEnabled } = Route.useLoaderData()
+  const { repos, truncated, aiEnabled } = Route.useLoaderData()
 
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
@@ -59,10 +47,10 @@ function Dashboard() {
   const [inFlight, setInFlight] = useState<ReadonlySet<string>>(new Set())
   const [verdicts, setVerdicts] = useState<Record<string, AiVerdict>>({})
   const [analyzing, setAnalyzing] = useState(false)
-  const [progress, setProgress] = useState<{ done: number; total: number; failed: number } | null>(null)
+  const [sweeping, setSweeping] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  const [sweepNotice, setSweepNotice] = useState<string | null>(null)
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // NLP search
   const [scope, setScope] = useState<Scope>('starred')
@@ -254,101 +242,54 @@ function Dashboard() {
     void unstarSelected()
   }
 
-  function pollSweep(jobId: string) {
-    if (pollTimer.current) clearTimeout(pollTimer.current)
-    const tick = async () => {
-      try {
-        const s = await getSweepStatus({ data: { jobId } })
-        setProgress({ done: s.done + s.failed, total: s.total, failed: s.failed })
-        if (s.done + s.failed >= s.total) {
-          setTimeout(() => setProgress(null), 2500)
-          return
-        }
-      } catch {
-        // transient — keep polling
-      }
-      pollTimer.current = setTimeout(() => void tick(), 1500)
-    }
-    void tick()
-  }
-
-  // Resume any sweep still draining server-side from a previous visit
-  useEffect(() => {
-    if (!queueEnabled) return
-    let cancelled = false
-    void getActiveSweeps().then((jobs) => {
-      if (cancelled || jobs.length === 0) return
-      setRemoved((prev) => {
-        const set = new Set(prev)
-        for (const job of jobs) for (const fullName of job.pending) set.add(fullName)
-        return set
-      })
-      const latest = jobs[0]
-      setProgress({ done: latest.done + latest.failed, total: latest.total, failed: latest.failed })
-      pollSweep(latest.jobId)
-    })
-    return () => {
-      cancelled = true
-      if (pollTimer.current) clearTimeout(pollTimer.current)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queueEnabled])
-
   async function unstarSelected() {
+    if (sweeping) return
     const targets = live.filter((r) => selected.has(r.fullName))
     if (targets.length === 0) return
 
-    if (queueEnabled) {
-      // Background sweep: enqueue once, the queue consumer talks to GitHub —
-      // safe to close the tab, progress resumes on the next visit.
-      setProgress({ done: 0, total: targets.length, failed: 0 })
-      try {
-        const { jobId } = await startSweep({
-          data: { targets: targets.map((r) => ({ owner: r.owner, name: r.name, fullName: r.fullName })) },
-        })
-        setRemoved((prev) => {
-          const set = new Set(prev)
-          for (const r of targets) set.add(r.fullName)
-          return set
-        })
-        setSelected(new Set())
-        pollSweep(jobId)
-      } catch {
-        setProgress(null)
-        setSearchError('Could not start the sweep — try again.')
-      }
-      return
-    }
-
-    setProgress({ done: 0, total: targets.length, failed: 0 })
+    setSweeping(true)
+    setSweepNotice(null)
     setInFlight(new Set(targets.map((r) => r.fullName)))
 
-    await runPool(
-      targets,
-      async (repo) => {
-        try {
-          await unstar({ data: { owner: repo.owner, repo: repo.name } })
-          setRemoved((prev) => new Set(prev).add(repo.fullName))
-          setSelected((prev) => {
-            const set = new Set(prev)
-            set.delete(repo.fullName)
-            return set
-          })
-          setProgress((p) => (p ? { ...p, done: p.done + 1 } : p))
-        } catch {
-          setProgress((p) => (p ? { ...p, done: p.done + 1, failed: p.failed + 1 } : p))
-        } finally {
-          setInFlight((prev) => {
-            const set = new Set(prev)
-            set.delete(repo.fullName)
-            return set
-          })
-        }
-      },
-      UNSTAR_CONCURRENCY,
-    )
+    let failed = 0
+    let firstError: string | null = null
+    let first = true
+    for (const repo of targets) {
+      if (!first) await sleep(UNSTAR_PACING_MS)
+      first = false
+      try {
+        await unstar({ data: { owner: repo.owner, repo: repo.name } })
+        setRemoved((prev) => new Set(prev).add(repo.fullName))
+        setSelected((prev) => {
+          const set = new Set(prev)
+          set.delete(repo.fullName)
+          return set
+        })
+      } catch (err) {
+        // Row stays in the list — the unstar didn't happen
+        failed++
+        firstError ??= err instanceof Error ? err.message : String(err)
+        console.error(`Unstar failed for ${repo.fullName}:`, err)
+      } finally {
+        setInFlight((prev) => {
+          const set = new Set(prev)
+          set.delete(repo.fullName)
+          return set
+        })
+      }
+    }
 
-    setTimeout(() => setProgress(null), 2500)
+    if (failed > 0) {
+      const hint = firstError?.includes('(403)')
+        ? 'A 403 usually means the GitHub app is missing the "Starring: write" permission, or GitHub is rate-limiting writes.'
+        : firstError?.includes('(429)')
+          ? 'GitHub is rate-limiting writes — give it a minute and sweep again.'
+          : 'If this keeps happening, restart the dev server and hard-refresh this page.'
+      setSweepNotice(
+        `${targets.length - failed} unstarred · ${failed} failed and stayed in the list. First error: ${firstError ?? 'unknown'}. ${hint}`,
+      )
+    }
+    setSweeping(false)
   }
 
   const swept = removed.size
@@ -366,10 +307,7 @@ function Dashboard() {
       <header className="sticky top-0 z-10 border-b border-border bg-background/90 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
           <div className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-accent/40 bg-accent-soft">
-              <Star className="h-3.5 w-3.5 fill-accent text-accent-strong" />
-            </span>
-            <span className="font-syne text-sm tracking-tight">workaround</span>
+            <span className="font-syne text-lg tracking-tight">workaround</span>
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
@@ -390,7 +328,17 @@ function Dashboard() {
       <main className="mx-auto max-w-5xl px-4 pt-8 pb-16">
         <div className="rise-in mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="font-cantarell text-2xl font-bold tracking-tight">Starred repos</h1>
+            <div className="flex items-center gap-2">
+              <h1 className=" text-md font-bold tracking-tight">Starred repos</h1>
+              <button
+                onClick={() => void router.invalidate()}
+                title="Re-fetch stars from GitHub"
+                aria-label="Refresh"
+                className="cursor-pointer rounded-md p-1 text-faint transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+              </button>
+            </div>
             <p className="mt-1 font-mono text-xs text-muted-foreground">
               {live.length} starred · {flagged.length} flagged
               {swept > 0 && <span className="text-accent-strong"> · {swept} swept this session</span>}
@@ -410,7 +358,7 @@ function Dashboard() {
             <Button
               variant="destructive"
               onClick={requestUnstar}
-              disabled={selectedCount === 0 || progress !== null}
+              disabled={selectedCount === 0 || sweeping}
               className={cn(confirming && 'animate-pulse')}
             >
               <Trash2 className="h-4 w-4" />
@@ -425,23 +373,17 @@ function Dashboard() {
           </p>
         )}
 
-        {progress && (
-          <div className="mb-4">
-            <div className="mb-1 flex justify-between font-mono text-xs text-muted-foreground">
-              <span>
-                sweeping {progress.done}/{progress.total}
-                {progress.failed > 0 && <span className="text-destructive"> · {progress.failed} failed</span>}
-                {queueEnabled && <span className="text-faint"> · runs in background, safe to close the tab</span>}
-              </span>
-              <span>{Math.round((progress.done / progress.total) * 100)}%</span>
-            </div>
-            <div className="h-1 overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full bg-accent transition-[width] duration-300"
-                style={{ width: `${(progress.done / progress.total) * 100}%` }}
-              />
-            </div>
-          </div>
+        {sweepNotice && (
+          <p className="mb-4 flex items-start justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive-soft px-3 py-2 text-xs text-destructive">
+            <span>{sweepNotice}</span>
+            <button
+              onClick={() => setSweepNotice(null)}
+              aria-label="Dismiss"
+              className="shrink-0 cursor-pointer hover:opacity-70"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </p>
         )}
 
         <div className="mb-2 flex flex-wrap items-center gap-2">

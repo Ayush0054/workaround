@@ -15,10 +15,6 @@ export interface AppEnv {
   ANTHROPIC_API_KEY?: string
   /** Optional. Defaults to claude-opus-4-8. */
   AI_MODEL?: string
-
-  /** Bound via wrangler.jsonc — power the background sweep engine. */
-  DB?: D1Database
-  UNSTAR_QUEUE?: Queue
 }
 
 export const env = workerEnv as unknown as AppEnv

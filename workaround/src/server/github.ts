@@ -1,5 +1,21 @@
 const GITHUB_API = 'https://api.github.com'
 
+export class GitHubApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly retryAfterSeconds?: number,
+  ) {
+    super(message)
+    this.name = 'GitHubApiError'
+  }
+
+  /** Secondary rate limits surface as 403/429 with a retry-after header. */
+  get rateLimited(): boolean {
+    return this.status === 403 || this.status === 429
+  }
+}
+
 export type Viewer = {
   login: string
   name: string | null
@@ -130,7 +146,18 @@ export async function unstarRepo(token: string, owner: string, repo: string): Pr
   )
   // 204 = unstarred, 404 = was not starred (treat as success — desired state reached)
   if (res.status !== 204 && res.status !== 404) {
-    throw new Error(`Unstar failed for ${owner}/${repo} (${res.status})`)
+    const retryAfter = Number(res.headers.get('retry-after')) || undefined
+    // GitHub's 403s say exactly what's wrong — surface it instead of guessing
+    let detail = ''
+    try {
+      const body = (await res.json()) as { message?: string }
+      if (body.message) detail = ` — ${body.message}`
+    } catch {
+      // non-JSON body, nothing to add
+    }
+    const needs = res.headers.get('x-accepted-github-permissions')
+    if (needs) detail += ` [needs: ${needs}]`
+    throw new GitHubApiError(`Unstar failed for ${owner}/${repo} (${res.status})${detail}`, res.status, retryAfter)
   }
 }
 
