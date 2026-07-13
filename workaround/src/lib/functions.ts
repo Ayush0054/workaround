@@ -1,7 +1,11 @@
 import { redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
+import { Effect, Either } from 'effect'
+import { attempt, originalError, runResult } from '#/lib/errors'
+import { scoreRepos } from '#/lib/repo-scoring'
 import { env } from '#/server/env'
 import {
+  GitHubApiError,
   fetchAllStars,
   fetchReadmeHtml,
   fetchRepo,
@@ -11,7 +15,7 @@ import {
   viewerHasStarred,
 } from '#/server/github'
 import { getAppSession } from '#/server/session'
-import { aiConfigured, aiReview, scoreRepos, semanticMatch, toSearchQuery } from '#/server/suggest'
+import { aiConfigured, aiReview, semanticMatch, toSearchQuery } from '#/server/suggest'
 import type { CandidatePayload, CompactRepo } from '#/server/suggest'
 
 async function requireToken(): Promise<string> {
@@ -27,9 +31,9 @@ export const getAuth = createServerFn({ method: 'GET' }).handler(async () => {
   if (!env.SESSION_SECRET) return null
 
   const session = await getAppSession()
-  if (!session.data.token) return null
+  if (!session.data.token || !session.data.login) return null
   return {
-    login: session.data.login!,
+    login: session.data.login,
     name: session.data.name ?? null,
     avatarUrl: session.data.avatarUrl ?? '',
   }
@@ -40,10 +44,19 @@ export const getStars = createServerFn({ method: 'GET' }).handler(async () => {
   const token = session.data.token
   if (!token) throw redirect({ to: '/' })
 
-  const { repos, truncated } = await fetchAllStars(token)
+  const result = await runResult(attempt(() => fetchAllStars(token), 'Could not load starred repositories'))
+  if (Either.isLeft(result)) {
+    const error = originalError(result.left)
+    if (error instanceof GitHubApiError && error.status === 401) {
+      await session.clear()
+      throw redirect({ to: '/', search: { error: 'session_expired' } })
+    }
+    throw error
+  }
+
   return {
-    repos: scoreRepos(repos),
-    truncated,
+    repos: scoreRepos(result.right.repos),
+    truncated: result.right.truncated,
     aiEnabled: aiConfigured(),
   }
 })
@@ -64,7 +77,7 @@ export const star = createServerFn({ method: 'POST' })
     return { ok: true as const }
   })
 
-const MAX_AI_CANDIDATES = 120
+export const MAX_AI_CANDIDATES = 120
 
 export const analyzeStars = createServerFn({ method: 'POST' })
   .validator((data: { candidates: CandidatePayload[] }) => data)
@@ -101,10 +114,22 @@ export const getRepoInfo = createServerFn({ method: 'GET' })
     const token = session.data.token
     if (!token) throw redirect({ to: '/' })
 
-    const [repo, readmeHtml, starred] = await Promise.all([
-      fetchRepo(token, data.owner, data.name),
-      fetchReadmeHtml(token, data.owner, data.name).catch(() => null),
-      viewerHasStarred(token, data.owner, data.name),
-    ])
-    return { repo, readmeHtml, starred }
+    const result = await runResult(
+      Effect.all(
+        {
+          repo: attempt(() => fetchRepo(token, data.owner, data.name), 'Could not load repository'),
+          readmeHtml: attempt(() => fetchReadmeHtml(token, data.owner, data.name)).pipe(
+            Effect.catchAll(() => Effect.succeed(null)),
+          ),
+          starred: attempt(
+            () => viewerHasStarred(token, data.owner, data.name),
+            'Could not load repository star status',
+          ),
+        },
+        { concurrency: 'unbounded' },
+      ),
+    )
+
+    if (Either.isLeft(result)) throw originalError(result.left)
+    return result.right
   })

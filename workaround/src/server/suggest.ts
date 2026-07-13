@@ -1,55 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { env } from './env'
-import type { StarredRepo } from './github'
-
-export type Signal = 'archived' | 'deprecated' | 'stale' | 'very-stale' | 'old-star'
-
-export type ScoredRepo = StarredRepo & {
-  score: number
-  signals: Signal[]
-}
-
-const YEAR_MS = 365 * 24 * 60 * 60 * 1000
-const DEPRECATED_RE = /\b(deprecated|unmaintained|no longer maintained|abandoned|archived|moved to|superseded by)\b/i
-
-/**
- * Deterministic signals — free to compute, no AI needed.
- * The LLM pass only runs on repos these surface plus anything the user selects.
- */
-export function scoreRepo(repo: StarredRepo, now = Date.now()): ScoredRepo {
-  const signals: Signal[] = []
-  let score = 0
-
-  if (repo.archived) {
-    signals.push('archived')
-    score += 50
-  }
-  if (repo.description && DEPRECATED_RE.test(repo.description)) {
-    signals.push('deprecated')
-    score += 40
-  }
-  if (repo.pushedAt) {
-    const age = now - Date.parse(repo.pushedAt)
-    if (age > 4 * YEAR_MS) {
-      signals.push('very-stale')
-      score += 35
-    } else if (age > 2 * YEAR_MS) {
-      signals.push('stale')
-      score += 20
-    }
-  }
-  if (now - Date.parse(repo.starredAt) > 3 * YEAR_MS) {
-    signals.push('old-star')
-    score += 15
-  }
-
-  return { ...repo, score, signals }
-}
-
-export function scoreRepos(repos: StarredRepo[]): ScoredRepo[] {
-  const now = Date.now()
-  return repos.map((r) => scoreRepo(r, now))
-}
+import type { Signal } from '#/lib/repo-scoring'
 
 export type AiVerdict = {
   fullName: string
@@ -93,6 +44,17 @@ export function aiConfigured(): boolean {
   return Boolean(env.ANTHROPIC_API_KEY)
 }
 
+function createAiClient(): Anthropic {
+  return new Anthropic({
+    apiKey: env.ANTHROPIC_API_KEY,
+    baseURL: env.AI_GATEWAY_URL || undefined,
+  })
+}
+
+function aiModel(): string {
+  return env.AI_MODEL || 'claude-opus-4-8'
+}
+
 /**
  * Asks Claude (via Cloudflare AI Gateway when AI_GATEWAY_URL is set) for a
  * keep/unstar verdict per candidate. Returns [] when no API key is configured
@@ -101,13 +63,8 @@ export function aiConfigured(): boolean {
 export async function aiReview(candidates: CandidatePayload[]): Promise<AiVerdict[]> {
   if (!env.ANTHROPIC_API_KEY || candidates.length === 0) return []
 
-  const client = new Anthropic({
-    apiKey: env.ANTHROPIC_API_KEY,
-    baseURL: env.AI_GATEWAY_URL || undefined,
-  })
-
-  const response = await client.messages.create({
-    model: env.AI_MODEL || 'claude-opus-4-8',
+  const response = await createAiClient().messages.create({
+    model: aiModel(),
     max_tokens: 16000,
     thinking: { type: 'adaptive' },
     output_config: {
@@ -161,17 +118,12 @@ export async function semanticMatch(query: string, repos: CompactRepo[]): Promis
   if (!env.ANTHROPIC_API_KEY) throw new Error('AI is not configured (set ANTHROPIC_API_KEY)')
   if (repos.length === 0) return []
 
-  const client = new Anthropic({
-    apiKey: env.ANTHROPIC_API_KEY,
-    baseURL: env.AI_GATEWAY_URL || undefined,
-  })
-
   const catalog = repos
     .map((r) => `${r.fullName} | ${r.language ?? '-'} | ${(r.description ?? '').slice(0, 140)}`)
     .join('\n')
 
-  const response = await client.messages.create({
-    model: env.AI_MODEL || 'claude-opus-4-8',
+  const response = await createAiClient().messages.create({
+    model: aiModel(),
     max_tokens: 16000,
     thinking: { type: 'adaptive' },
     output_config: { format: { type: 'json_schema', schema: MATCH_SCHEMA } },
@@ -212,13 +164,8 @@ const QUERY_SCHEMA = {
 export async function toSearchQuery(query: string): Promise<string> {
   if (!env.ANTHROPIC_API_KEY) return query
 
-  const client = new Anthropic({
-    apiKey: env.ANTHROPIC_API_KEY,
-    baseURL: env.AI_GATEWAY_URL || undefined,
-  })
-
-  const response = await client.messages.create({
-    model: env.AI_MODEL || 'claude-opus-4-8',
+  const response = await createAiClient().messages.create({
+    model: aiModel(),
     max_tokens: 1000,
     thinking: { type: 'adaptive' },
     output_config: { format: { type: 'json_schema', schema: QUERY_SCHEMA } },

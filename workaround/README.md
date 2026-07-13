@@ -6,7 +6,7 @@ Tidy your GitHub stars. Workaround lists every repo you've starred, flags the de
 
 ## Features
 
-- **Flagging (free, deterministic)** — archived, "deprecated" in the description, no commits in 2y/4y, starred 3+ years ago. No AI cost; computed in [src/server/suggest.ts](src/server/suggest.ts).
+- **Flagging (free, deterministic)** — archived, "deprecated" in the description, no commits in 2y/4y, starred 3+ years ago. No AI cost; computed in [src/lib/repo-scoring.ts](src/lib/repo-scoring.ts).
 - **AI review** — flagged repos go to Claude, which returns a keep / unstar / unsure verdict with a one-line reason each (structured output, so it always parses).
 - **NLP search** — describe a repo in plain English and press Enter:
   - *My stars* — Claude semantically matches the description against your starred repos
@@ -83,9 +83,13 @@ src/
     env.ts                     typed Cloudflare env bindings
     session.ts                 encrypted cookie session
     github.ts                  GitHub REST client (stars, unstar, search, repo, README)
-    suggest.ts                 heuristics + Claude review + semantic search + NL→query
+    suggest.ts                 Claude review + semantic search + NL→query
+  lib/repo-scoring.ts          deterministic cleanup signals and scoring
   lib/functions.ts             server functions (the RPC boundary)
-  components/                  shadcn-style primitives + RepoRow
+  components/
+    layout/                    shared app header, footer, and wordmark
+    ui/                        reusable controls and typography primitives
+    RepoRow.tsx                starred repository row
   styles.css                   design tokens (neutral light palette, fonts)
 ```
 

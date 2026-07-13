@@ -1,5 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { Github, Sparkles, Star } from 'lucide-react'
+import { AppFooter } from '#/components/AppFooter'
+import { TypographyHeading } from '#/components/ui/typography'
 import { getAuth } from '#/lib/functions'
 
 export const Route = createFileRoute('/')({
@@ -16,6 +18,7 @@ export const Route = createFileRoute('/')({
 const ERROR_MESSAGES: Record<string, string> = {
   oauth_state: 'Sign-in was interrupted — please try again.',
   oauth_failed: 'GitHub sign-in failed — please try again.',
+  session_expired: 'Your GitHub session expired — please sign in again.',
 }
 
 function Landing() {
@@ -29,10 +32,14 @@ function Landing() {
             <Star className="h-5 w-5 fill-accent text-accent-strong" />
           </div>
 
-          <h1 className="font-cantarell max-w-xl text-4xl leading-[1.08] font-bold tracking-tight sm:text-5xl">
+          <TypographyHeading
+            level={1}
+            size="lg"
+            className="font-cantarell max-w-xl leading-[1.08] font-bold tracking-tight"
+          >
             Your stars deserve
             <br />a spring clean.
-          </h1>
+          </TypographyHeading>
 
           <p className="mt-5 max-w-md text-base leading-relaxed text-muted-foreground">
             Workaround lists every repo you've starred, flags the archived and abandoned ones, and lets AI argue about
@@ -81,9 +88,7 @@ function Landing() {
         </div>
       </div>
 
-      <footer className="mx-auto w-full max-w-2xl px-6 pb-8">
-        <p className="font-syne text-[11px] text-faint">workaround — unstar the dead weight</p>
-      </footer>
+      <AppFooter />
     </main>
   )
 }

@@ -2,17 +2,11 @@ import { Github, Star } from 'lucide-react'
 import { Badge } from '#/components/ui/badge'
 import { Checkbox } from '#/components/ui/checkbox'
 import { cn, formatCount, timeAgo } from '#/lib/utils'
-import type { AiVerdict, ScoredRepo, Signal } from '#/server/suggest'
+import type { ScoredRepo } from '#/lib/repo-scoring'
+import type { AiVerdict } from '#/server/suggest'
+import { SIGNAL_LABELS } from '../constants'
 
-const SIGNAL_LABELS: Record<Signal, string> = {
-  archived: 'archived',
-  deprecated: 'deprecated',
-  'very-stale': 'no commits 4y+',
-  stale: 'no commits 2y+',
-  'old-star': 'starred 3y+ ago',
-}
-
-export interface RepoRowProps {
+interface RepoRowProps {
   repo: ScoredRepo
   verdict?: AiVerdict
   selected: boolean
@@ -42,7 +36,7 @@ export function RepoRow({ repo, verdict, selected, onSelectedChange, unstarring 
             href={detailUrl}
             target="_blank"
             rel="noopener"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
             className="font-mono text-sm leading-5 hover:underline"
           >
             <span className="text-muted-foreground">{repo.owner}/</span>
@@ -52,7 +46,7 @@ export function RepoRow({ repo, verdict, selected, onSelectedChange, unstarring 
             href={repo.htmlUrl}
             target="_blank"
             rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
             aria-label={`Open ${repo.fullName} on GitHub`}
             className="text-faint opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"
           >
@@ -64,9 +58,9 @@ export function RepoRow({ repo, verdict, selected, onSelectedChange, unstarring 
               ai: {verdict.verdict}
             </Badge>
           )}
-          {repo.signals.map((s) => (
-            <Badge key={s} variant={s === 'archived' || s === 'deprecated' ? 'red' : 'flag'}>
-              {SIGNAL_LABELS[s]}
+          {repo.signals.map((signal) => (
+            <Badge key={signal} variant={signal === 'archived' || signal === 'deprecated' ? 'red' : 'flag'}>
+              {SIGNAL_LABELS[signal]}
             </Badge>
           ))}
         </div>

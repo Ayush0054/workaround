@@ -1,6 +1,7 @@
 import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
+import { TypographyHeading } from '#/components/ui/typography'
 
 import appCss from '../styles.css?url'
 
@@ -32,7 +33,9 @@ export const Route = createRootRoute({
 function NotFound() {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-4 px-6 text-center">
-      <p className="font-syne text-5xl text-faint">404</p>
+      <TypographyHeading level={1} size="lg" className="font-syne text-5xl text-faint">
+        404
+      </TypographyHeading>
       <p className="text-sm text-muted-foreground">This page doesn't exist.</p>
       <a
         href="/"

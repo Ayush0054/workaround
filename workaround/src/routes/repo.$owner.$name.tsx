@@ -1,9 +1,14 @@
 import { Link, createFileRoute, redirect } from '@tanstack/react-router'
+import { Either } from 'effect'
 import { ArrowLeft, ArrowUpRight, CircleDot, Eye, GitFork, Github, Globe, Loader2, Scale, Star } from 'lucide-react'
 import { useState } from 'react'
+import { AppHeader, AppWordmark } from '#/components/AppHeader'
 import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
+import { TypographyHeading } from '#/components/ui/typography'
+import { attempt, runResult } from '#/lib/errors'
 import { getAuth, getRepoInfo, star, unstar } from '#/lib/functions'
+import { isDeprecated, yearsSince } from '#/lib/repo-scoring'
 import { formatCount, timeAgo } from '#/lib/utils'
 
 export const Route = createFileRoute('/repo/$owner/$name')({
@@ -16,51 +21,55 @@ export const Route = createFileRoute('/repo/$owner/$name')({
   component: RepoPage,
 })
 
-const YEAR_MS = 365 * 24 * 60 * 60 * 1000
-
 function RepoPage() {
   const { repo, readmeHtml, starred: initialStarred } = Route.useLoaderData()
   const [starred, setStarred] = useState(initialStarred)
   const [busy, setBusy] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
 
-  const staleYears = repo.pushedAt ? Math.floor((Date.now() - Date.parse(repo.pushedAt)) / YEAR_MS) : null
-  const deprecated = repo.description ? /\b(deprecated|unmaintained|no longer maintained|abandoned)\b/i.test(repo.description) : false
+  const staleYears = yearsSince(repo.pushedAt)
+  const deprecated = isDeprecated(repo.description)
 
   async function toggleStar() {
     setBusy(true)
-    try {
-      const payload = { data: { owner: repo.owner, repo: repo.name } }
-      if (starred) await unstar(payload)
-      else await star(payload)
-      setStarred(!starred)
-    } finally {
-      setBusy(false)
+    setActionError(null)
+    const payload = { data: { owner: repo.owner, repo: repo.name } }
+    const result = await runResult(
+      attempt(
+        () => (starred ? unstar(payload) : star(payload)),
+        `Could not ${starred ? 'unstar' : 'star'} ${repo.fullName}`,
+      ),
+    )
+
+    setBusy(false)
+    if (Either.isLeft(result)) {
+      setActionError(result.left.message)
+      return
     }
+    setStarred(!starred)
   }
 
   return (
     <div className="min-h-dvh">
-      <header className="sticky top-0 z-10 border-b border-border bg-background/90 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-4xl items-center justify-between px-4">
-          <Link
-            to="/dashboard"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Dashboard
-          </Link>
-          <span className="font-syne text-sm">workaround</span>
-        </div>
-      </header>
+      <AppHeader contentClassName="max-w-4xl">
+        <Link
+          to="/dashboard"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Dashboard
+        </Link>
+        <AppWordmark className="text-sm" />
+      </AppHeader>
 
       <main className="mx-auto max-w-4xl px-4 pt-10 pb-16">
         <div className="rise-in">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
-              <h1 className="font-mono text-2xl leading-tight break-words">
+              <TypographyHeading level={1} size="md" className="font-mono break-words">
                 <span className="text-muted-foreground">{repo.owner}/</span>
                 <span className="font-semibold">{repo.name}</span>
-              </h1>
+              </TypographyHeading>
               {repo.description && (
                 <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-muted-foreground">{repo.description}</p>
               )}
@@ -94,6 +103,12 @@ function RepoPage() {
               </Button>
             </div>
           </div>
+
+          {actionError && (
+            <p role="alert" className="mt-3 text-sm text-destructive">
+              {actionError}
+            </p>
+          )}
 
           <dl className="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-3 lg:grid-cols-6">
             {(
@@ -134,7 +149,9 @@ function RepoPage() {
 
           {readmeHtml ? (
             <section className="mt-10">
-              <h2 className="font-cantarell mb-3 text-lg font-bold">README</h2>
+              <TypographyHeading level={2} size="sm" className="font-cantarell mb-3 font-bold">
+                README
+              </TypographyHeading>
               <article
                 className="prose prose-sm max-w-none overflow-x-auto rounded-xl border border-border bg-card px-6 py-5 prose-a:text-accent-strong prose-pre:bg-muted prose-pre:text-foreground"
                 dangerouslySetInnerHTML={{ __html: readmeHtml }}

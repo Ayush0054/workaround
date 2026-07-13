@@ -1,5 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { deleteCookie, getCookie } from '@tanstack/react-start/server'
+import { Either } from 'effect'
+import { attempt, originalError, runResult } from '#/lib/errors'
 import { env } from '#/server/env'
 import { exchangeCode, fetchViewer } from '#/server/github'
 import { getAppSession } from '#/server/session'
@@ -16,34 +18,40 @@ export const Route = createFileRoute('/api/auth/callback')({
         const code = url.searchParams.get('code')
         const state = url.searchParams.get('state')
         const expectedState = getCookie('gh_oauth_state')
-        deleteCookie('gh_oauth_state')
+        deleteCookie('gh_oauth_state', { path: '/' })
 
         if (!code || !state || !expectedState || state !== expectedState) {
           return redirect('/?error=oauth_state')
         }
 
-        try {
-          const token = await exchangeCode({
-            clientId: env.GITHUB_CLIENT_ID,
-            clientSecret: env.GITHUB_CLIENT_SECRET,
-            code,
-            redirectUri: `${url.origin}/api/auth/callback`,
-          })
-          const viewer = await fetchViewer(token)
+        const result = await runResult(
+          attempt(async () => {
+            const token = await exchangeCode({
+              clientId: env.GITHUB_CLIENT_ID,
+              clientSecret: env.GITHUB_CLIENT_SECRET,
+              code,
+              redirectUri: `${url.origin}/api/auth/callback`,
+            })
+            const viewer = await fetchViewer(token)
 
-          const session = await getAppSession()
-          await session.update({
-            token,
-            login: viewer.login,
-            name: viewer.name,
-            avatarUrl: viewer.avatarUrl,
-          })
+            const session = await getAppSession()
+            await session.update({
+              token,
+              login: viewer.login,
+              name: viewer.name,
+              avatarUrl: viewer.avatarUrl,
+            })
 
-          return redirect('/dashboard')
-        } catch (err) {
-          console.error('OAuth callback failed:', err)
+            return redirect('/dashboard')
+          }, 'GitHub sign-in failed'),
+        )
+
+        if (Either.isLeft(result)) {
+          console.error('OAuth callback failed:', originalError(result.left))
           return redirect('/?error=oauth_failed')
         }
+
+        return result.right
       },
     },
   },

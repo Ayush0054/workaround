@@ -1,3 +1,6 @@
+import { Either } from 'effect'
+import { attempt, runResult } from '#/lib/errors'
+
 const GITHUB_API = 'https://api.github.com'
 
 export class GitHubApiError extends Error {
@@ -95,7 +98,9 @@ export async function fetchAllStars(
     const res = await fetch(`${GITHUB_API}/user/starred?per_page=100&page=${page}`, {
       headers: headers(token, 'application/vnd.github.star+json'),
     })
-    if (!res.ok) throw new Error(`GitHub /user/starred failed (${res.status})`)
+    if (!res.ok) {
+      throw new GitHubApiError(`GitHub /user/starred failed (${res.status})`, res.status)
+    }
 
     const batch = (await res.json()) as Array<{
       starred_at: string
@@ -148,13 +153,10 @@ export async function unstarRepo(token: string, owner: string, repo: string): Pr
   if (res.status !== 204 && res.status !== 404) {
     const retryAfter = Number(res.headers.get('retry-after')) || undefined
     // GitHub's 403s say exactly what's wrong — surface it instead of guessing
-    let detail = ''
-    try {
-      const body = (await res.json()) as { message?: string }
-      if (body.message) detail = ` — ${body.message}`
-    } catch {
-      // non-JSON body, nothing to add
-    }
+    const body = await runResult(
+      attempt(() => res.json() as Promise<{ message?: string }>, 'GitHub returned an invalid error response'),
+    )
+    let detail = Either.isRight(body) && body.right.message ? ` — ${body.right.message}` : ''
     const needs = res.headers.get('x-accepted-github-permissions')
     if (needs) detail += ` [needs: ${needs}]`
     throw new GitHubApiError(`Unstar failed for ${owner}/${repo} (${res.status})${detail}`, res.status, retryAfter)
@@ -174,7 +176,9 @@ export async function viewerHasStarred(token: string, owner: string, repo: strin
     `${GITHUB_API}/user/starred/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
     { headers: headers(token) },
   )
-  return res.status === 204
+  if (res.status === 204) return true
+  if (res.status === 404) return false
+  throw new Error(`GitHub star status failed for ${owner}/${repo} (${res.status})`)
 }
 
 export type RepoDetail = {
