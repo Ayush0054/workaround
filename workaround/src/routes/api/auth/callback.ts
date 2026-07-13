@@ -3,7 +3,7 @@ import { deleteCookie, getCookie } from '@tanstack/react-start/server'
 import { Either } from 'effect'
 import { attempt, originalError, runResult } from '#/lib/errors'
 import { env } from '#/server/env'
-import { exchangeCode, fetchViewer } from '#/server/github'
+import { exchangeCode, fetchViewer, isGitHubAppUserToken } from '#/server/github'
 import { getAppSession } from '#/server/session'
 
 function redirect(to: string) {
@@ -32,6 +32,9 @@ export const Route = createFileRoute('/api/auth/callback')({
               code,
               redirectUri: `${url.origin}/api/auth/callback`,
             })
+            if (isGitHubAppUserToken(token)) {
+              return redirect('/?error=github_app_unsupported')
+            }
             const viewer = await fetchViewer(token)
 
             const session = await getAppSession()

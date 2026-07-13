@@ -23,18 +23,14 @@ Tidy your GitHub stars. Workaround lists every repo you've starred, flags the de
 
 ## Setup
 
-### 1. Create a GitHub App (recommended) or OAuth App
+### 1. Create a GitHub OAuth App
 
-**GitHub App** (narrowest consent screen — this is the whole pitch):
+GitHub App user tokens are limited to repositories accessible to the app installation, so they cannot clean up arbitrary third-party public stars. Workaround uses a classic OAuth App with the `public_repo` scope, which GitHub requires for starring public repositories.
 
-1. GitHub → Settings → Developer settings → **GitHub Apps** → New GitHub App
-2. Callback URL: `http://localhost:3000/api/auth/callback` (add your production URL later)
-3. Enable **"Request user authorization (OAuth) during installation"**
-4. Permissions → Account permissions → **Starring: Read and write**. Nothing else.
-5. Webhooks: uncheck "Active"
-6. Generate a client secret
-
-**OAuth App** also works (`public_repo` scope is requested automatically), but its consent screen asks for more than starring.
+1. GitHub → Settings → Developer settings → **OAuth Apps** → New OAuth App
+2. Homepage URL: `http://localhost:3000`
+3. Authorization callback URL: `http://localhost:3000/api/auth/callback`
+4. Generate a client secret
 
 ### 2. Configure environment
 
@@ -76,9 +72,14 @@ Then add `https://<your-worker>.workers.dev/api/auth/callback` as a callback URL
 src/
   routes/
     index.tsx                  landing (redirects to /dashboard when signed in)
-    dashboard.tsx              star list, filters, AI review, NLP search, bulk sweep
+    dashboard.tsx              thin dashboard route and data handoff
     repo.$owner.$name.tsx      repo detail page (stats, topics, README)
     api/auth/{login,callback,logout}.ts   OAuth server routes
+  pages/Dashboard/
+    DashboardPage.tsx          dashboard composition
+    useDashboard.ts            dashboard state and actions
+    components/                dashboard-only UI
+    constants.ts, utils.ts     dashboard-only constants and helpers
   server/
     env.ts                     typed Cloudflare env bindings
     session.ts                 encrypted cookie session
@@ -87,9 +88,9 @@ src/
   lib/repo-scoring.ts          deterministic cleanup signals and scoring
   lib/functions.ts             server functions (the RPC boundary)
   components/
-    layout/                    shared app header, footer, and wordmark
+    AppHeader.tsx              shared app header and wordmark
+    AppFooter.tsx              shared app footer
     ui/                        reusable controls and typography primitives
-    RepoRow.tsx                starred repository row
   styles.css                   design tokens (neutral light palette, fonts)
 ```
 

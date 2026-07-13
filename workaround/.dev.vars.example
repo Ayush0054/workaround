@@ -1,7 +1,7 @@
 # Copy to .dev.vars for local development (never commit .dev.vars).
 # In production set these with: npx wrangler secret put <NAME>
 
-# GitHub App (recommended) or OAuth App credentials — see README for setup.
+# GitHub OAuth App credentials — GitHub App tokens cannot update arbitrary third-party stars.
 GITHUB_CLIENT_ID=your_client_id
 GITHUB_CLIENT_SECRET=your_client_secret
 

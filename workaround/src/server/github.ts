@@ -3,6 +3,10 @@ import { attempt, runResult } from '#/lib/errors'
 
 const GITHUB_API = 'https://api.github.com'
 
+export function isGitHubAppUserToken(token: string): boolean {
+  return token.startsWith('ghu_')
+}
+
 export class GitHubApiError extends Error {
   constructor(
     message: string,
@@ -17,6 +21,14 @@ export class GitHubApiError extends Error {
   get rateLimited(): boolean {
     return this.status === 403 || this.status === 429
   }
+}
+
+function requireOAuthAppTokenForStarWrite(token: string): void {
+  if (!isGitHubAppUserToken(token)) return
+  throw new GitHubApiError(
+    'This session uses a GitHub App token, which cannot manage arbitrary third-party starred repositories. Configure a GitHub OAuth App and sign in again.',
+    403,
+  )
 }
 
 export type Viewer = {
@@ -145,6 +157,7 @@ export async function fetchAllStars(
 }
 
 export async function unstarRepo(token: string, owner: string, repo: string): Promise<void> {
+  requireOAuthAppTokenForStarWrite(token)
   const res = await fetch(
     `${GITHUB_API}/user/starred/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
     { method: 'DELETE', headers: headers(token) },
@@ -164,6 +177,7 @@ export async function unstarRepo(token: string, owner: string, repo: string): Pr
 }
 
 export async function starRepo(token: string, owner: string, repo: string): Promise<void> {
+  requireOAuthAppTokenForStarWrite(token)
   const res = await fetch(
     `${GITHUB_API}/user/starred/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
     { method: 'PUT', headers: { ...headers(token), 'Content-Length': '0' } },

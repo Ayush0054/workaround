@@ -20,8 +20,7 @@ export const Route = createFileRoute('/api/auth/login')({
         authorize.searchParams.set('client_id', env.GITHUB_CLIENT_ID)
         authorize.searchParams.set('redirect_uri', `${origin}/api/auth/callback`)
         authorize.searchParams.set('state', state)
-        // Ignored by GitHub Apps (which use fine-grained "Starring" permission);
-        // needed for classic OAuth apps to star/unstar public repos.
+        // GitHub requires public_repo for OAuth Apps to star/unstar public repos.
         authorize.searchParams.set('scope', 'public_repo')
 
         return new Response(null, {

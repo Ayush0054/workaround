@@ -18,6 +18,8 @@ export const Route = createFileRoute('/')({
 const ERROR_MESSAGES: Record<string, string> = {
   oauth_state: 'Sign-in was interrupted — please try again.',
   oauth_failed: 'GitHub sign-in failed — please try again.',
+  github_app_unsupported:
+    'Workaround needs GitHub OAuth App credentials to update stars across public repositories.',
   session_expired: 'Your GitHub session expired — please sign in again.',
 }
 
