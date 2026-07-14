@@ -9,11 +9,41 @@
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
-	"main": "@tanstack/react-start/server-entry",
+	"main": "src/worker.ts",
 	"observability": {
 		"enabled": true
 	},
-	"upload_source_maps": true
+	"upload_source_maps": true,
+	"queues": {
+		"producers": [
+			{
+				"binding": "UNSTAR_QUEUE",
+				"queue": "workaround-unstar"
+			}
+		],
+		"consumers": [
+			{
+				"queue": "workaround-unstar",
+				"max_batch_size": 10,
+				"max_batch_timeout": 5,
+				"max_retries": 3,
+				"max_concurrency": 1
+			}
+		]
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "workaround",
+			"database_id": "fee4ee54-a544-4522-80e7-a654785d5b56"
+		},
+		{
+			"binding": "workaround",
+			"database_name": "workaround",
+			"database_id": "fee4ee54-a544-4522-80e7-a654785d5b56",
+			"remote": true
+		}
+	]
 	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement

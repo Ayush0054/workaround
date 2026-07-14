@@ -11,6 +11,8 @@
     "build": "vite build",
     "preview": "npm run build && vite preview",
     "test": "vitest run",
+    "db:migrate:local": "wrangler d1 migrations apply workaround --local",
+    "db:migrate:remote": "wrangler d1 migrations apply workaround --remote",
     "deploy": "npm run build && wrangler deploy",
     "cf-typegen": "wrangler types"
   },

@@ -70,7 +70,7 @@ export function getVisibleRepos({
 
 export function getSweepFailureHint(error: string | null): string {
   if (error?.includes('(403)')) {
-    return 'A 403 usually means the GitHub app is missing the "Starring: write" permission, or GitHub is rate-limiting writes.'
+    return 'A 403 usually means this session is not using the configured GitHub OAuth App, or GitHub is rate-limiting writes.'
   }
   if (error?.includes('(429)')) {
     return 'GitHub is rate-limiting writes — give it a minute and sweep again.'

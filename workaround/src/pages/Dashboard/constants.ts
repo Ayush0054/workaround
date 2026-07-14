@@ -5,6 +5,7 @@ export const CONFIRMATION_TIMEOUT_MS = 4000
 
 /** GitHub recommends serial writes when secondary rate limits are possible. */
 export const UNSTAR_PACING_MS = 1000
+export const SWEEP_POLL_INTERVAL_MS = 5000
 
 export const FILTER_LABELS: ReadonlyArray<{
   value: Exclude<DashboardFilter, 'nlp'>

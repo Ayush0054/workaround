@@ -21,7 +21,7 @@ export const Route = createFileRoute('/api/auth/callback')({
         deleteCookie('gh_oauth_state', { path: '/' })
 
         if (!code || !state || !expectedState || state !== expectedState) {
-          return redirect('/?error=oauth_state')
+          return redirect('/dashboard?error=oauth_state')
         }
 
         const result = await runResult(
@@ -33,7 +33,7 @@ export const Route = createFileRoute('/api/auth/callback')({
               redirectUri: `${url.origin}/api/auth/callback`,
             })
             if (isGitHubAppUserToken(token)) {
-              return redirect('/?error=github_app_unsupported')
+              return redirect('/dashboard?error=github_app_unsupported')
             }
             const viewer = await fetchViewer(token)
 
@@ -51,7 +51,7 @@ export const Route = createFileRoute('/api/auth/callback')({
 
         if (Either.isLeft(result)) {
           console.error('OAuth callback failed:', originalError(result.left))
-          return redirect('/?error=oauth_failed')
+          return redirect('/dashboard?error=oauth_failed')
         }
 
         return result.right

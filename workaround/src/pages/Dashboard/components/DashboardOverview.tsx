@@ -1,4 +1,4 @@
-import { Loader2, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
+import { RefreshCw, Trash2 } from 'lucide-react'
 import { Button } from '#/components/ui/button'
 import { TypographyHeading } from '#/components/ui/typography'
 import { cn } from '#/lib/utils'
@@ -8,12 +8,9 @@ interface DashboardOverviewProps {
   flaggedCount: number
   sweptCount: number
   selectedCount: number
-  aiEnabled: boolean
-  analyzing: boolean
   sweeping: boolean
   confirming: boolean
   onRefresh: () => void
-  onAnalyze: () => void
   onRequestUnstar: () => void
 }
 
@@ -22,12 +19,9 @@ export function DashboardOverview({
   flaggedCount,
   sweptCount,
   selectedCount,
-  aiEnabled,
-  analyzing,
   sweeping,
   confirming,
   onRefresh,
-  onAnalyze,
   onRequestUnstar,
 }: DashboardOverviewProps) {
   return (
@@ -53,15 +47,6 @@ export function DashboardOverview({
       </div>
 
       <div className="flex items-center gap-2">
-        <Button
-          variant="accent"
-          onClick={onAnalyze}
-          disabled={!aiEnabled || analyzing || flaggedCount === 0}
-          title={aiEnabled ? undefined : 'Set ANTHROPIC_API_KEY to enable AI review'}
-        >
-          {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          {analyzing ? 'Reviewing…' : 'AI review'}
-        </Button>
         <Button
           variant="destructive"
           onClick={onRequestUnstar}

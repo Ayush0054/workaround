@@ -14,7 +14,7 @@ import { formatCount, timeAgo } from '#/lib/utils'
 export const Route = createFileRoute('/repo/$owner/$name')({
   beforeLoad: async () => {
     const auth = await getAuth()
-    if (!auth) throw redirect({ to: '/' })
+    if (!auth) throw redirect({ to: '/dashboard' })
   },
   loader: ({ params }) => getRepoInfo({ data: { owner: params.owner, name: params.name } }),
   staleTime: 5 * 60 * 1000,

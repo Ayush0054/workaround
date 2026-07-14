@@ -7,7 +7,7 @@ export const Route = createFileRoute('/api/auth/logout')({
       POST: async () => {
         const session = await getAppSession()
         await session.clear()
-        return new Response(null, { status: 302, headers: { Location: '/' } })
+        return new Response(null, { status: 302, headers: { Location: '/dashboard' } })
       },
     },
   },

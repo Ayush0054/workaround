@@ -10,10 +10,10 @@ export const Route = createRootRoute({
     meta: [
       { charSet: 'utf-8' },
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { title: 'Workaround — tidy your GitHub stars' },
+      { title: 'Workaround — practical fixes for everyday software' },
       {
         name: 'description',
-        content: 'Review your starred repos, get AI-backed suggestions, and unstar the dead weight.',
+        content: 'Hacks, shortcuts, and practical helpers for Git, Linear, Slack, Notion, and the software you use every day.',
       },
     ],
     links: [

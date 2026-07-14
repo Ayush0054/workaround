@@ -17,17 +17,29 @@ import {
 import { getAppSession } from '#/server/session'
 import { aiConfigured, aiReview, semanticMatch, toSearchQuery } from '#/server/suggest'
 import type { CandidatePayload, CompactRepo } from '#/server/suggest'
+import {
+  activeSweeps,
+  enqueueSweep,
+  queueConfigured,
+  sweepStatus,
+} from '#/server/sweep'
+import type { SweepTarget } from '#/server/sweep'
+import { loadAiVerdicts, saveAiVerdicts } from '#/server/verdicts'
+
+async function requireSession(): Promise<{ login: string; token: string }> {
+  const session = await getAppSession()
+  const { login, token } = session.data
+  if (!login || !token) throw new Error('Not signed in')
+  return { login, token }
+}
 
 async function requireToken(): Promise<string> {
-  const session = await getAppSession()
-  const token = session.data.token
-  if (!token) throw new Error('Not signed in')
-  return token
+  return (await requireSession()).token
 }
 
 export const getAuth = createServerFn({ method: 'GET' }).handler(async () => {
-  // Unconfigured env (fresh clone, no .dev.vars yet) should render the landing
-  // page as signed-out instead of crashing on session decryption.
+  // Unconfigured env (fresh clone, no .dev.vars yet) should render the
+  // dashboard as signed-out instead of crashing on session decryption.
   if (!env.SESSION_SECRET) return null
 
   const session = await getAppSession()
@@ -42,23 +54,62 @@ export const getAuth = createServerFn({ method: 'GET' }).handler(async () => {
 export const getStars = createServerFn({ method: 'GET' }).handler(async () => {
   const session = await getAppSession()
   const token = session.data.token
-  if (!token) throw redirect({ to: '/' })
+  const login = session.data.login
+  if (!token || !login) throw redirect({ to: '/dashboard' })
 
   const result = await runResult(attempt(() => fetchAllStars(token), 'Could not load starred repositories'))
   if (Either.isLeft(result)) {
     const error = originalError(result.left)
     if (error instanceof GitHubApiError && error.status === 401) {
       await session.clear()
-      throw redirect({ to: '/', search: { error: 'session_expired' } })
+      throw redirect({ to: '/dashboard', search: { error: 'session_expired' } })
     }
     throw error
   }
+
+  const savedVerdictsResult = await runResult(
+    attempt(() => loadAiVerdicts(login), 'Could not load saved AI verdicts'),
+  )
 
   return {
     repos: scoreRepos(result.right.repos),
     truncated: result.right.truncated,
     aiEnabled: aiConfigured(),
+    queueEnabled: queueConfigured(),
+    savedVerdicts: Either.isRight(savedVerdictsResult) ? savedVerdictsResult.right : [],
   }
+})
+
+const MAX_SWEEP_TARGETS = 3000
+
+export const startSweep = createServerFn({ method: 'POST' })
+  .validator((data: { targets: SweepTarget[] }) => data)
+  .handler(async ({ data }) => {
+    if (!queueConfigured()) throw new Error('Cloudflare Queue and D1 bindings are not configured')
+    const { login, token } = await requireSession()
+    const uniqueTargets = Array.from(
+      new Map(
+        data.targets
+          .slice(0, MAX_SWEEP_TARGETS)
+          .map((target) => [target.fullName, target] as const),
+      ).values(),
+    )
+    if (uniqueTargets.length === 0) throw new Error('Select at least one repository')
+    return enqueueSweep(login, token, uniqueTargets)
+  })
+
+export const getSweepStatus = createServerFn({ method: 'GET' })
+  .validator((data: { jobId: string }) => data)
+  .handler(async ({ data }) => {
+    if (!queueConfigured()) return null
+    const { login } = await requireSession()
+    return sweepStatus(login, data.jobId)
+  })
+
+export const getActiveSweeps = createServerFn({ method: 'GET' }).handler(async () => {
+  if (!queueConfigured()) return []
+  const { login } = await requireSession()
+  return activeSweeps(login)
 })
 
 export const unstar = createServerFn({ method: 'POST' })
@@ -82,9 +133,10 @@ export const MAX_AI_CANDIDATES = 120
 export const analyzeStars = createServerFn({ method: 'POST' })
   .validator((data: { candidates: CandidatePayload[] }) => data)
   .handler(async ({ data }) => {
-    await requireToken()
+    const { login } = await requireSession()
     const candidates = data.candidates.slice(0, MAX_AI_CANDIDATES)
     const verdicts = await aiReview(candidates)
+    await saveAiVerdicts(login, verdicts)
     return { verdicts, analyzed: candidates.length }
   })
 
@@ -112,7 +164,7 @@ export const getRepoInfo = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     const session = await getAppSession()
     const token = session.data.token
-    if (!token) throw redirect({ to: '/' })
+    if (!token) throw redirect({ to: '/dashboard' })
 
     const result = await runResult(
       Effect.all(

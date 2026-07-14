@@ -1,4 +1,5 @@
 import { env as workerEnv } from 'cloudflare:workers'
+import type { SweepMessage } from './sweep'
 
 export interface AppEnv {
   GITHUB_CLIENT_ID: string
@@ -15,6 +16,10 @@ export interface AppEnv {
   ANTHROPIC_API_KEY?: string
   /** Optional. Defaults to claude-opus-4-8. */
   AI_MODEL?: string
+  /** Durable sweep progress and item state. */
+  DB?: D1Database
+  /** Background unstar work. */
+  UNSTAR_QUEUE?: Queue<SweepMessage>
 }
 
 export const env = workerEnv as unknown as AppEnv
