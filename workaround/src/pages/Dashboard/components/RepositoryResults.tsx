@@ -85,7 +85,7 @@ export function RepositoryResults({
               size="sm"
               onClick={onAnalyze}
               disabled={!aiEnabled || analyzing || flaggedCount === 0}
-              title={aiEnabled ? undefined : 'Set ANTHROPIC_API_KEY to enable AI review'}
+              title={aiEnabled ? undefined : 'Configure an AI provider to enable AI review'}
             >
               {analyzing ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -124,7 +124,7 @@ export function RepositoryResults({
                 size="sm"
                 onClick={onAnalyze}
                 disabled={!aiEnabled || analyzing || flaggedCount === 0}
-                title={aiEnabled ? undefined : 'Set ANTHROPIC_API_KEY to enable AI review'}
+                title={aiEnabled ? undefined : 'Configure an AI provider to enable AI review'}
                 className="mt-5"
               >
                 {analyzing ? (

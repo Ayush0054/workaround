@@ -209,7 +209,7 @@ export function useDashboard({
 
     if (wantsStarred && !aiEnabled) {
       setSearchError(
-        'Semantic search over your stars needs ANTHROPIC_API_KEY. GitHub-wide search works without it — switch the scope.',
+        'Semantic search over your stars needs an AI provider. GitHub-wide search works without it — switch the scope.',
       )
       return
     }

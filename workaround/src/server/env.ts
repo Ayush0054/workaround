@@ -16,6 +16,14 @@ export interface AppEnv {
   ANTHROPIC_API_KEY?: string
   /** Optional. Defaults to claude-opus-4-8. */
   AI_MODEL?: string
+  /** Full Cloudflare AI Gateway chat-completions endpoint. */
+  CLOUDFLARE_AI_GATEWAY_URL?: string
+  /** Scoped Cloudflare token with AI Gateway Run access. */
+  CLOUDFLARE_AI_API_TOKEN?: string
+  /** Optional. Defaults to the account's `default` AI Gateway. */
+  CLOUDFLARE_AI_GATEWAY_ID?: string
+  /** Provider-prefixed model name, e.g. openai/gpt-5.4-mini. */
+  CLOUDFLARE_AI_MODEL?: string
   /** Durable sweep progress and item state. */
   DB?: D1Database
   /** Background unstar work. */
