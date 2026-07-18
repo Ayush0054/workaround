@@ -28,7 +28,11 @@ export function DashboardOverview({
     <div className="rise-in mb-6 flex flex-wrap items-end justify-between gap-4">
       <div>
         <div className="flex items-center gap-2">
-          <TypographyHeading level={1} size="xs" className="font-bold tracking-tight">
+          <TypographyHeading
+            level={1}
+            size="xs"
+            className="font-bold tracking-tight"
+          >
             Starred repos
           </TypographyHeading>
           <button
@@ -42,7 +46,12 @@ export function DashboardOverview({
         </div>
         <p className="mt-1 font-mono text-xs text-muted-foreground">
           {liveCount} starred · {flaggedCount} flagged
-          {sweptCount > 0 && <span className="text-accent-strong"> · {sweptCount} swept this session</span>}
+          {sweptCount > 0 && (
+            <span className="text-accent-strong">
+              {' '}
+              · {sweptCount} swept this session
+            </span>
+          )}
         </p>
       </div>
 
@@ -54,7 +63,9 @@ export function DashboardOverview({
           className={cn(confirming && 'animate-pulse')}
         >
           <Trash2 className="h-4 w-4" />
-          {confirming ? `Really unstar ${selectedCount}?` : `Unstar ${selectedCount || ''}`}
+          {confirming
+            ? `Really unstar ${selectedCount}?`
+            : `Unstar ${selectedCount || ''}`}
         </Button>
       </div>
     </div>

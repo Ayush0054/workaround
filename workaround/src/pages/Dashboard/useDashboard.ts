@@ -91,10 +91,7 @@ export function useDashboard(initialRepositories: StarredRepositories) {
     setPageLoading(true)
 
     void runResult(
-      attempt(
-        () => getStars(),
-        'Could not load repositories',
-      ),
+      attempt(() => getStars(), 'Could not load repositories'),
     ).then((result) => {
       if (cancelled) return
       setPageLoading(false)
@@ -158,9 +155,7 @@ export function useDashboard(initialRepositories: StarredRepositories) {
   const liveNames = useMemo(
     () =>
       new Set(
-        repositories.starredNames.filter(
-          (fullName) => !removed.has(fullName),
-        ),
+        repositories.starredNames.filter((fullName) => !removed.has(fullName)),
       ),
     [repositories.starredNames, removed],
   )

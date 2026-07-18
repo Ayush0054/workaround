@@ -9,7 +9,8 @@ const variants: Record<Variant, string> = {
   outline: 'border border-input bg-card shadow-sm hover:bg-muted',
   ghost: 'hover:bg-muted',
   destructive: 'bg-destructive text-white shadow-sm hover:bg-destructive/90',
-  accent: 'bg-accent-soft text-accent-strong border border-accent/40 shadow-sm hover:border-accent/70',
+  accent:
+    'bg-accent-soft text-accent-strong border border-accent/40 shadow-sm hover:border-accent/70',
 }
 
 const sizes: Record<Size, string> = {
@@ -23,7 +24,12 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: Size
 }
 
-export function Button({ className, variant = 'default', size = 'default', ...props }: ButtonProps) {
+export function Button({
+  className,
+  variant = 'default',
+  size = 'default',
+  ...props
+}: ButtonProps) {
   return (
     <button
       className={cn(

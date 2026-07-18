@@ -172,9 +172,7 @@ export function RepositoryResults({
                   repo={repo}
                   verdict={verdicts[repo.fullName]}
                   selected={selected.has(repo.fullName)}
-                  onSelectedChange={(next) =>
-                    onToggleRepo(repo.fullName, next)
-                  }
+                  onSelectedChange={(next) => onToggleRepo(repo.fullName, next)}
                   unstarring={inFlight.has(repo.fullName)}
                 />
               ))}

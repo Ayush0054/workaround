@@ -1,2 +1,5 @@
 export { AppHeader, AppWordmark } from './AppHeader'
 export type { AppHeaderProps } from './AppHeader'
+export { AppFooter } from './AppFooter'
+export { DashboardLayout } from './DashboardLayout'
+export { PublicLayout } from './PublicLayout'

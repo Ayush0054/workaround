@@ -2,7 +2,10 @@ import { GitBranch } from 'lucide-react'
 
 export function DashboardToolTabs() {
   return (
-    <nav className="rise-in mb-7 border-b border-border" aria-label="Workaround tools">
+    <nav
+      className="rise-in mb-7 border-b border-border"
+      aria-label="Workaround tools"
+    >
       <div role="tablist" aria-label="Available tools">
         <button
           id="git-tool-tab"

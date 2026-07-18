@@ -1,4 +1,4 @@
-import { DashboardLayout } from '#/layouts'
+import { DashboardLayout } from '#/components/layout'
 import {
   DashboardFilters,
   DashboardNotices,

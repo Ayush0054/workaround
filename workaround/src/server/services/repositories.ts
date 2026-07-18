@@ -70,8 +70,8 @@ export async function getStarredRepositories(): Promise<StarredRepositories> {
   const flaggedCount = liveRepos.filter(
     (repo) => repo.signals.length > 0,
   ).length
-  const reviewedCount = liveRepos.filter(
-    (repo) => reviewedNames.has(repo.fullName),
+  const reviewedCount = liveRepos.filter((repo) =>
+    reviewedNames.has(repo.fullName),
   ).length
 
   return {

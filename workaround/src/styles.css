@@ -6,7 +6,8 @@
 @theme {
   --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Geist Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
-  --font-cantarell: 'Cantarell', 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-cantarell:
+    'Cantarell', 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
   --font-syne: 'Syne Mono', ui-monospace, monospace;
 
   /* Neutral light palette — paper white, cool ink, indigo accent */

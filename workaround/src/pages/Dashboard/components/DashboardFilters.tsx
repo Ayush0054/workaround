@@ -26,12 +26,16 @@ export function DashboardFilters({
             onClick={() => onFilterChange(value)}
             className={cn(
               'cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-              activeFilter === value ? 'bg-card shadow-sm' : 'text-muted-foreground hover:text-foreground',
+              activeFilter === value
+                ? 'bg-card shadow-sm'
+                : 'text-muted-foreground hover:text-foreground',
             )}
           >
             {label}
             {count !== null && (
-              <span className="ml-1.5 font-mono text-[10px] text-accent-strong">{count}</span>
+              <span className="ml-1.5 font-mono text-[10px] text-accent-strong">
+                {count}
+              </span>
             )}
           </button>
         ))}

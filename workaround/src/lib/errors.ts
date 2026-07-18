@@ -15,14 +15,22 @@ export class AppError extends Error {
   }
 }
 
-export function getErrorMessage(error: unknown, fallback = DEFAULT_ERROR_MESSAGE): string {
+export function getErrorMessage(
+  error: unknown,
+  fallback = DEFAULT_ERROR_MESSAGE,
+): string {
   if (error instanceof Error && error.message.trim()) return error.message
   if (typeof error === 'string' && error.trim()) return error
   return fallback
 }
 
-export function toAppError(error: unknown, fallback = DEFAULT_ERROR_MESSAGE): AppError {
-  return error instanceof AppError ? error : new AppError(getErrorMessage(error, fallback), error)
+export function toAppError(
+  error: unknown,
+  fallback = DEFAULT_ERROR_MESSAGE,
+): AppError {
+  return error instanceof AppError
+    ? error
+    : new AppError(getErrorMessage(error, fallback), error)
 }
 
 export function attempt<A>(
@@ -35,7 +43,9 @@ export function attempt<A>(
   })
 }
 
-export function runResult<A, E>(effect: Effect.Effect<A, E>): Promise<Either.Either<A, E>> {
+export function runResult<A, E>(
+  effect: Effect.Effect<A, E>,
+): Promise<Either.Either<A, E>> {
   return Effect.runPromise(Effect.either(effect))
 }
 

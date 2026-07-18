@@ -14,14 +14,19 @@ export const Route = createRootRoute({
       { title: 'Workaround — practical fixes for everyday software' },
       {
         name: 'description',
-        content: 'Small, practical fixes for everyday software. Git is the first workaround.',
+        content:
+          'Small, practical fixes for everyday software. Git is the first workaround.',
       },
     ],
     links: [
       { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
       { rel: 'manifest', href: '/manifest.json' },
       { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
-      { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossOrigin: 'anonymous' },
+      {
+        rel: 'preconnect',
+        href: 'https://fonts.gstatic.com',
+        crossOrigin: 'anonymous',
+      },
       {
         rel: 'stylesheet',
         href: 'https://fonts.googleapis.com/css2?family=Cantarell:ital,wght@0,400;0,700;1,400;1,700&family=Syne+Mono&display=swap',
@@ -36,7 +41,11 @@ export const Route = createRootRoute({
 function NotFound() {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-4 px-6 text-center">
-      <TypographyHeading level={1} size="lg" className="font-syne text-5xl text-faint">
+      <TypographyHeading
+        level={1}
+        size="lg"
+        className="font-syne text-5xl text-faint"
+      >
         404
       </TypographyHeading>
       <p className="text-sm text-muted-foreground">This page doesn't exist.</p>

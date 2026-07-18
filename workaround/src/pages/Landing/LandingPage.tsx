@@ -1,7 +1,7 @@
 import { ArrowUpRight, Github, Search, Sparkles, Star } from 'lucide-react'
+import { PublicLayout } from '#/components/layout'
 import { Badge } from '#/components/ui/badge'
 import { TypographyHeading } from '#/components/ui/typography'
-import { PublicLayout } from '#/layouts'
 
 const ERROR_MESSAGES: Record<string, string> = {
   oauth_state: 'Sign-in was interrupted — please try again.',

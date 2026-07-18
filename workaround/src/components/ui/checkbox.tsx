@@ -8,7 +8,12 @@ export interface CheckboxProps {
   className?: string
 }
 
-export function Checkbox({ checked, onCheckedChange, className, ...props }: CheckboxProps) {
+export function Checkbox({
+  checked,
+  onCheckedChange,
+  className,
+  ...props
+}: CheckboxProps) {
   const isChecked = checked === true
   return (
     <button
