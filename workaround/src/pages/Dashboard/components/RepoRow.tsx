@@ -3,7 +3,7 @@ import { Badge } from '#/components/ui/badge'
 import { Checkbox } from '#/components/ui/checkbox'
 import { cn, formatCount, timeAgo } from '#/lib/utils'
 import type { ScoredRepo } from '#/lib/repo-scoring'
-import type { AiVerdict } from '#/server/suggest'
+import type { AiVerdict } from '#/types/ai'
 import { SIGNAL_LABELS } from '../constants'
 
 interface RepoRowProps {
@@ -14,23 +14,32 @@ interface RepoRowProps {
   unstarring?: boolean
 }
 
-export function RepoRow({ repo, verdict, selected, onSelectedChange, unstarring }: RepoRowProps) {
+export function RepoRow({
+  repo,
+  verdict,
+  selected,
+  onSelectedChange,
+  unstarring,
+}: RepoRowProps) {
   const detailUrl = `/repo/${repo.owner}/${repo.name}`
 
   return (
-    <li
-      onClick={() => window.open(detailUrl, '_blank', 'noopener')}
+    <tr
       className={cn(
-        'group flex cursor-pointer items-start gap-3 border-b border-border px-4 py-3 transition-colors last:border-b-0',
+        'group border-b border-border transition-colors last:border-b-0',
         selected ? 'bg-accent-soft/60' : 'hover:bg-muted/60',
         unstarring && 'pointer-events-none opacity-40',
       )}
     >
-      <div className="pt-0.5">
-        <Checkbox checked={selected} onCheckedChange={onSelectedChange} aria-label={`Select ${repo.fullName}`} />
-      </div>
+      <td className="w-10 px-4 py-3 align-top">
+        <Checkbox
+          checked={selected}
+          onCheckedChange={onSelectedChange}
+          aria-label={`Select ${repo.fullName}`}
+        />
+      </td>
 
-      <div className="min-w-0 flex-1">
+      <td className="min-w-0 py-3 pr-4 align-top">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <a
             href={detailUrl}
@@ -54,12 +63,27 @@ export function RepoRow({ repo, verdict, selected, onSelectedChange, unstarring 
           </a>
 
           {verdict && (
-            <Badge variant={verdict.verdict === 'unstar' ? 'red' : verdict.verdict === 'keep' ? 'green' : 'neutral'}>
+            <Badge
+              variant={
+                verdict.verdict === 'unstar'
+                  ? 'red'
+                  : verdict.verdict === 'keep'
+                    ? 'green'
+                    : 'neutral'
+              }
+            >
               ai: {verdict.verdict}
             </Badge>
           )}
           {repo.signals.map((signal) => (
-            <Badge key={signal} variant={signal === 'archived' || signal === 'deprecated' ? 'red' : 'flag'}>
+            <Badge
+              key={signal}
+              variant={
+                signal === 'archived' || signal === 'deprecated'
+                  ? 'red'
+                  : 'flag'
+              }
+            >
               {SIGNAL_LABELS[signal]}
             </Badge>
           ))}
@@ -80,7 +104,7 @@ export function RepoRow({ repo, verdict, selected, onSelectedChange, unstarring 
           <span>pushed {timeAgo(repo.pushedAt)}</span>
           <span>starred {timeAgo(repo.starredAt)}</span>
         </div>
-      </div>
-    </li>
+      </td>
+    </tr>
   )
 }

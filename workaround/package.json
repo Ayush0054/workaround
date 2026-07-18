@@ -1,6 +1,7 @@
 {
   "name": "workaround",
   "private": true,
+  "packageManager": "pnpm@9.15.2",
   "type": "module",
   "imports": {
     "#/*": "./src/*"
@@ -9,11 +10,11 @@
     "dev": "vite dev --port 3000",
     "generate-routes": "tsr generate",
     "build": "vite build",
-    "preview": "npm run build && vite preview",
+    "preview": "pnpm run build && vite preview",
     "test": "vitest run",
     "db:migrate:local": "wrangler d1 migrations apply workaround --local",
     "db:migrate:remote": "wrangler d1 migrations apply workaround --remote",
-    "deploy": "npm run build && wrangler deploy",
+    "deploy": "pnpm run build && wrangler deploy",
     "cf-typegen": "wrangler types"
   },
   "dependencies": {
@@ -29,12 +30,14 @@
     "@tanstack/react-start": "latest",
     "@tanstack/router-plugin": "^1.132.0",
     "clsx": "^2.1.1",
+    "drizzle-orm": "^0.45.2",
     "effect": "^3.21.4",
     "lucide-react": "^0.545.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "tailwind-merge": "^3.6.0",
-    "tailwindcss": "^4.1.18"
+    "tailwindcss": "^4.1.18",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.16",

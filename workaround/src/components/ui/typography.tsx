@@ -14,6 +14,18 @@ const headingSizes: Record<HeadingSize, string> = {
   lg: 'text-4xl sm:text-5xl',
 }
 
+const headingTags: Record<
+  HeadingLevel,
+  'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6'
+> = {
+  1: 'h1',
+  2: 'h2',
+  3: 'h3',
+  4: 'h4',
+  5: 'h5',
+  6: 'h6',
+}
+
 const textSizes: Record<TextSize, string> = {
   xs: 'text-xs',
   sm: 'text-sm',
@@ -32,12 +44,19 @@ export interface TypographyHeadingProps extends HTMLAttributes<HTMLHeadingElemen
   size?: HeadingSize
 }
 
-export const TypographyHeading = forwardRef<HTMLHeadingElement, TypographyHeadingProps>(
-  ({ level = 2, size = 'sm', className, ...props }, ref) => {
-    const Component = `h${level}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6'
-    return <Component ref={ref} className={cn('leading-tight', headingSizes[size], className)} {...props} />
-  },
-)
+export const TypographyHeading = forwardRef<
+  HTMLHeadingElement,
+  TypographyHeadingProps
+>(({ level = 2, size = 'sm', className, ...props }, ref) => {
+  const Component = headingTags[level]
+  return (
+    <Component
+      ref={ref}
+      className={cn('leading-tight', headingSizes[size], className)}
+      {...props}
+    />
+  )
+})
 TypographyHeading.displayName = 'TypographyHeading'
 
 export interface TypographyTextProps extends HTMLAttributes<HTMLSpanElement> {
@@ -47,7 +66,11 @@ export interface TypographyTextProps extends HTMLAttributes<HTMLSpanElement> {
 
 export const TypographyText = forwardRef<HTMLSpanElement, TypographyTextProps>(
   ({ size = 'sm', variant = 'body', className, ...props }, ref) => (
-    <span ref={ref} className={cn(textSizes[size], textVariants[variant], className)} {...props} />
+    <span
+      ref={ref}
+      className={cn(textSizes[size], textVariants[variant], className)}
+      {...props}
+    />
   ),
 )
 TypographyText.displayName = 'TypographyText'

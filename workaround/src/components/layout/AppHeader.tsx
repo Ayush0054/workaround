@@ -5,7 +5,12 @@ export interface AppHeaderProps extends HTMLAttributes<HTMLElement> {
   contentClassName?: string
 }
 
-export function AppHeader({ children, className, contentClassName, ...props }: AppHeaderProps) {
+export function AppHeader({
+  children,
+  className,
+  contentClassName,
+  ...props
+}: AppHeaderProps) {
   return (
     <header
       className={cn(
@@ -14,14 +19,22 @@ export function AppHeader({ children, className, contentClassName, ...props }: A
       )}
       {...props}
     >
-      <div className={cn('mx-auto flex h-14 max-w-5xl items-center justify-between px-4', contentClassName)}>
+      <div
+        className={cn(
+          'mx-auto flex h-14 max-w-5xl items-center justify-between px-4',
+          contentClassName,
+        )}
+      >
         {children}
       </div>
     </header>
   )
 }
 
-export function AppWordmark({ className, ...props }: HTMLAttributes<HTMLSpanElement>) {
+export function AppWordmark({
+  className,
+  ...props
+}: HTMLAttributes<HTMLSpanElement>) {
   return (
     <span className={cn('font-syne', className)} {...props}>
       workaround

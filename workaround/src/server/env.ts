@@ -1,5 +1,5 @@
 import { env as workerEnv } from 'cloudflare:workers'
-import type { SweepMessage } from './sweep'
+import type { SweepMessage } from '#/types/sweep'
 
 export interface AppEnv {
   GITHUB_CLIENT_ID: string
@@ -28,6 +28,8 @@ export interface AppEnv {
   DB?: D1Database
   /** Background unstar work. */
   UNSTAR_QUEUE?: Queue<SweepMessage>
+  /** Custom product analytics events. */
+  ANALYTICS?: AnalyticsEngineDataset
 }
 
-export const env = workerEnv as unknown as AppEnv
+export const env: AppEnv = workerEnv

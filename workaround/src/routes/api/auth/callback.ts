@@ -1,61 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { deleteCookie, getCookie } from '@tanstack/react-start/server'
-import { Either } from 'effect'
-import { attempt, originalError, runResult } from '#/lib/errors'
-import { env } from '#/server/env'
-import { exchangeCode, fetchViewer, isGitHubAppUserToken } from '#/server/github'
-import { getAppSession } from '#/server/session'
-
-function redirect(to: string) {
-  return new Response(null, { status: 302, headers: { Location: to } })
-}
+import { completeGitHubLogin } from '#/server/services/auth'
 
 export const Route = createFileRoute('/api/auth/callback')({
   server: {
     handlers: {
-      GET: async ({ request }) => {
-        const url = new URL(request.url)
-        const code = url.searchParams.get('code')
-        const state = url.searchParams.get('state')
-        const expectedState = getCookie('gh_oauth_state')
-        deleteCookie('gh_oauth_state', { path: '/' })
-
-        if (!code || !state || !expectedState || state !== expectedState) {
-          return redirect('/dashboard?error=oauth_state')
-        }
-
-        const result = await runResult(
-          attempt(async () => {
-            const token = await exchangeCode({
-              clientId: env.GITHUB_CLIENT_ID,
-              clientSecret: env.GITHUB_CLIENT_SECRET,
-              code,
-              redirectUri: `${url.origin}/api/auth/callback`,
-            })
-            if (isGitHubAppUserToken(token)) {
-              return redirect('/dashboard?error=github_app_unsupported')
-            }
-            const viewer = await fetchViewer(token)
-
-            const session = await getAppSession()
-            await session.update({
-              token,
-              login: viewer.login,
-              name: viewer.name,
-              avatarUrl: viewer.avatarUrl,
-            })
-
-            return redirect('/dashboard')
-          }, 'GitHub sign-in failed'),
-        )
-
-        if (Either.isLeft(result)) {
-          console.error('OAuth callback failed:', originalError(result.left))
-          return redirect('/dashboard?error=oauth_failed')
-        }
-
-        return result.right
-      },
+      GET: ({ request }) => completeGitHubLogin(request),
     },
   },
 })

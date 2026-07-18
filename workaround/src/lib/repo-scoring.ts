@@ -1,6 +1,7 @@
-import type { StarredRepo } from '#/server/github'
+import type { StarredRepo } from '#/types/github'
 
-export type Signal = 'archived' | 'deprecated' | 'stale' | 'very-stale' | 'old-star'
+export type Signal =
+  'archived' | 'deprecated' | 'stale' | 'very-stale' | 'old-star'
 
 export type ScoredRepo = StarredRepo & {
   score: number
@@ -8,9 +9,13 @@ export type ScoredRepo = StarredRepo & {
 }
 
 const YEAR_MS = 365 * 24 * 60 * 60 * 1000
-const DEPRECATED_RE = /\b(deprecated|unmaintained|no longer maintained|abandoned|archived|moved to|superseded by)\b/i
+const DEPRECATED_RE =
+  /\b(deprecated|unmaintained|no longer maintained|abandoned|archived|moved to|superseded by)\b/i
 
-export function yearsSince(iso: string | null, now = Date.now()): number | null {
+export function yearsSince(
+  iso: string | null,
+  now = Date.now(),
+): number | null {
   return iso ? Math.floor((now - Date.parse(iso)) / YEAR_MS) : null
 }
 

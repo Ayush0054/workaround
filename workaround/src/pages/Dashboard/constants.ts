@@ -16,12 +16,6 @@ export const FILTER_LABELS: ReadonlyArray<{
   { value: 'ai', label: 'AI verdicts' },
 ]
 
-export const AI_VERDICT_ORDER = {
-  unstar: 0,
-  unsure: 1,
-  keep: 2,
-} as const
-
 export const SIGNAL_LABELS: Record<Signal, string> = {
   archived: 'archived',
   deprecated: 'deprecated',

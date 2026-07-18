@@ -1,6 +1,7 @@
 import { Loader2, Search, WandSparkles } from 'lucide-react'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
+import { searchScopeSchema } from '#/schemas/dashboard'
 import type { SearchScope } from '../types'
 
 interface DashboardSearchProps {
@@ -39,7 +40,10 @@ export function DashboardSearch({
         </div>
         <select
           value={scope}
-          onChange={(event) => onScopeChange(event.target.value as SearchScope)}
+          onChange={(event) => {
+            const result = searchScopeSchema.safeParse(event.target.value)
+            if (result.success) onScopeChange(result.data)
+          }}
           aria-label="Search scope"
           className="h-9 cursor-pointer rounded-lg border border-input bg-card px-2.5 text-sm shadow-sm focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring/40"
         >
@@ -47,8 +51,16 @@ export function DashboardSearch({
           <option value="github">All GitHub</option>
           <option value="both">Both</option>
         </select>
-        <Button variant="outline" onClick={onSearch} disabled={searching || !query.trim()}>
-          {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <WandSparkles className="h-4 w-4" />}
+        <Button
+          variant="outline"
+          onClick={onSearch}
+          disabled={searching || !query.trim()}
+        >
+          {searching ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <WandSparkles className="h-4 w-4" />
+          )}
           Ask AI
         </Button>
       </div>

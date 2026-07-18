@@ -11,7 +11,16 @@
 	],
 	"main": "src/worker.ts",
 	"observability": {
-		"enabled": true
+		"enabled": true,
+		"logs": {
+			"enabled": true,
+			"head_sampling_rate": 1,
+			"invocation_logs": true
+		},
+		"traces": {
+			"enabled": true,
+			"head_sampling_rate": 0.05
+		}
 	},
 	"upload_source_maps": true,
 	"queues": {
@@ -35,15 +44,16 @@
 		{
 			"binding": "DB",
 			"database_name": "workaround",
-			"database_id": "fee4ee54-a544-4522-80e7-a654785d5b56"
-		},
-		{
-			"binding": "workaround",
-			"database_name": "workaround",
 			"database_id": "fee4ee54-a544-4522-80e7-a654785d5b56",
-			"remote": true
+			"migrations_dir": "migrations"
 		}
-	]
+	],
+	"analytics_engine_datasets": [
+		{
+			"binding": "ANALYTICS",
+			"dataset": "workaround_events"
+		}
+	],
 	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement

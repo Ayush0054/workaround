@@ -2,7 +2,7 @@ import { Github, Loader2, Star, X } from 'lucide-react'
 import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
 import { formatCount, timeAgo } from '#/lib/utils'
-import type { SearchResult } from '#/server/github'
+import type { SearchResult } from '#/types/github'
 
 interface GitHubResultsProps {
   results: SearchResult[]
@@ -27,7 +27,9 @@ export function GitHubResults({
         <Github className="h-4 w-4 text-muted-foreground" />
         <span className="font-mono text-xs text-muted-foreground">
           {results.length} from GitHub
-          {translatedQuery && <span className="text-faint"> · query: {translatedQuery}</span>}
+          {translatedQuery && (
+            <span className="text-faint"> · query: {translatedQuery}</span>
+          )}
         </span>
         <button
           onClick={onDismiss}
@@ -60,7 +62,9 @@ export function GitHubResults({
                       rel="noopener"
                       className="font-mono text-sm leading-5 hover:underline"
                     >
-                      <span className="text-muted-foreground">{result.owner}/</span>
+                      <span className="text-muted-foreground">
+                        {result.owner}/
+                      </span>
                       <span className="font-semibold">{result.name}</span>
                     </a>
                     <a
@@ -89,11 +93,22 @@ export function GitHubResults({
                     <span>pushed {timeAgo(result.pushedAt)}</span>
                   </div>
                 </div>
-                <Button variant="outline" size="sm" disabled={busy} onClick={() => onToggleStar(result)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => onToggleStar(result)}
+                >
                   {busy ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : (
-                    <Star className={starred ? 'h-3.5 w-3.5 fill-accent text-accent-strong' : 'h-3.5 w-3.5'} />
+                    <Star
+                      className={
+                        starred
+                          ? 'h-3.5 w-3.5 fill-accent text-accent-strong'
+                          : 'h-3.5 w-3.5'
+                      }
+                    />
                   )}
                   {starred ? 'Unstar' : 'Star'}
                 </Button>

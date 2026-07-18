@@ -1,24 +1,23 @@
-import type { ScoredRepo } from '#/lib/repo-scoring'
-import type { AiVerdict } from '#/server/suggest'
+import type { z } from 'zod'
+import type {
+  dashboardFilterSchema,
+  searchScopeSchema,
+} from '#/schemas/dashboard'
+import type { StarredRepositories } from '#/types/stars'
 
-export type DashboardFilter = 'all' | 'flagged' | 'ai' | 'nlp'
-export type SearchScope = 'starred' | 'github' | 'both'
+export type DashboardFilter = z.infer<typeof dashboardFilterSchema>
+export type SearchScope = z.infer<typeof searchScopeSchema>
 
 export interface DashboardAuth {
   login: string
   name: string | null
+  email: string | null
   avatarUrl: string
 }
 
 export interface DashboardPageProps {
-  auth: DashboardAuth | null
-  authError?: string
-  repos: ScoredRepo[]
-  truncated: boolean
-  aiEnabled: boolean
-  queueEnabled: boolean
-  savedVerdicts: AiVerdict[]
-  onRefresh: () => void
+  auth: DashboardAuth
+  repositories: StarredRepositories
 }
 
 export interface DashboardTab {

@@ -1,46 +1,59 @@
 import { Either } from 'effect'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { attempt, originalError, runResult } from '#/lib/errors'
+import { dashboardSearchSchema } from '#/schemas/dashboard'
 import {
   analyzeStars,
   getActiveSweeps,
+  getStars,
   getSweepStatus,
   searchGithub,
   semanticFilterStars,
   star,
   startSweep,
   unstar,
-} from '#/lib/functions'
-import type { SearchResult } from '#/server/github'
-import type { AiVerdict } from '#/server/suggest'
-import type { SweepStatus } from '#/server/sweep'
+} from '#/server/routes'
+import type { AiVerdict } from '#/types/ai'
+import type { SearchResult } from '#/types/github'
+import type { StarredRepositories } from '#/types/stars'
+import type { SweepStatus, SweepTarget } from '#/types/sweep'
 import {
   CONFIRMATION_TIMEOUT_MS,
   FILTER_LABELS,
   SWEEP_POLL_INTERVAL_MS,
   UNSTAR_PACING_MS,
 } from './constants'
-import type {
-  DashboardFilter,
-  DashboardPageProps,
-  DashboardTab,
-  SearchScope,
-} from './types'
-import { buildAiCandidates, getSweepFailureHint, getVisibleRepos, sleep } from './utils'
+import type { DashboardFilter, DashboardTab, SearchScope } from './types'
+import { getSweepFailureHint, sleep } from './utils'
 
-export function useDashboard({
-  repos,
-  aiEnabled,
-  queueEnabled,
-  savedVerdicts,
-}: Pick<DashboardPageProps, 'repos' | 'aiEnabled' | 'queueEnabled' | 'savedVerdicts'>) {
+const VERDICT_ORDER: Record<AiVerdict['verdict'], number> = {
+  unstar: 0,
+  unsure: 1,
+  keep: 2,
+}
+
+function indexVerdicts(
+  verdicts: readonly AiVerdict[],
+): Record<string, AiVerdict> {
+  const indexed: Record<string, AiVerdict> = {}
+  for (const verdict of verdicts) indexed[verdict.fullName] = verdict
+  return indexed
+}
+
+export function useDashboard(initialRepositories: StarredRepositories) {
+  const skipInitialPageLoad = useRef(true)
+  const [repositories, setRepositories] = useState(initialRepositories)
+  const [pageLoading, setPageLoading] = useState(false)
+  const [refreshVersion, setRefreshVersion] = useState(0)
   const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<DashboardFilter>('all')
-  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
+  const [filter, setFilterState] = useState<DashboardFilter>('all')
+  const [selectedRepos, setSelectedRepos] = useState<
+    ReadonlyMap<string, SweepTarget>
+  >(new Map())
   const [removed, setRemoved] = useState<ReadonlySet<string>>(new Set())
   const [inFlight, setInFlight] = useState<ReadonlySet<string>>(new Set())
   const [verdicts, setVerdicts] = useState<Record<string, AiVerdict>>(() =>
-    Object.fromEntries(savedVerdicts.map((verdict) => [verdict.fullName, verdict])),
+    indexVerdicts(initialRepositories.savedVerdicts),
   )
   const [analyzing, setAnalyzing] = useState(false)
   const [sweeping, setSweeping] = useState(false)
@@ -54,136 +67,161 @@ export function useDashboard({
   const [ghResults, setGhResults] = useState<SearchResult[] | null>(null)
   const [translatedQuery, setTranslatedQuery] = useState<string | null>(null)
   const [ghBusy, setGhBusy] = useState<ReadonlySet<string>>(new Set())
-  const [ghStarredOverride, setGhStarredOverride] = useState<Record<string, boolean>>({})
+  const [ghStarredOverride, setGhStarredOverride] = useState<
+    Record<string, boolean>
+  >({})
 
   useEffect(() => {
     if (!confirming) return
-    const timeout = setTimeout(() => setConfirming(false), CONFIRMATION_TIMEOUT_MS)
+    const timeout = setTimeout(
+      () => setConfirming(false),
+      CONFIRMATION_TIMEOUT_MS,
+    )
     return () => clearTimeout(timeout)
   }, [confirming])
 
   useEffect(() => {
-    setVerdicts(Object.fromEntries(savedVerdicts.map((verdict) => [verdict.fullName, verdict])))
-  }, [savedVerdicts])
+    if (skipInitialPageLoad.current) {
+      skipInitialPageLoad.current = false
+      return
+    }
 
-  function applySweepStatus(status: SweepStatus) {
-    setInFlight(new Set(status.pending))
-    setRemoved((previous) => new Set([...previous, ...status.completed]))
-    setSelected((previous) => {
-      const updated = new Set(previous)
-      for (const fullName of status.completed) updated.delete(fullName)
-      return updated
-    })
-  }
-
-  useEffect(() => {
-    if (!queueEnabled) return
     let cancelled = false
+    setSearchError(null)
+    setPageLoading(true)
 
     void runResult(
-      attempt(() => getActiveSweeps(), 'Could not resume the active sweep'),
+      attempt(
+        () => getStars(),
+        'Could not load repositories',
+      ),
     ).then((result) => {
-      if (cancelled || Either.isLeft(result) || result.right.length === 0) return
-      const active = result.right[0]
-      applySweepStatus(active)
-      setSweeping(true)
-      setSweepJobId(active.jobId)
+      if (cancelled) return
+      setPageLoading(false)
+      if (Either.isLeft(result)) {
+        setSearchError(result.left.message)
+        return
+      }
+
+      setRepositories(result.right)
+      setVerdicts(indexVerdicts(result.right.savedVerdicts))
     })
 
     return () => {
       cancelled = true
     }
-  }, [queueEnabled])
+  }, [refreshVersion])
 
-  useEffect(() => {
-    if (!sweepJobId) return
-    let cancelled = false
-    let pollTimer: ReturnType<typeof setTimeout> | undefined
+  const selected = useMemo(() => new Set(selectedRepos.keys()), [selectedRepos])
+  const visible = useMemo(() => {
+    let filtered = repositories.repos.filter(
+      (repo) => !removed.has(repo.fullName),
+    )
 
-    const poll = async () => {
-      const result = await runResult(
-        attempt(
-          () => getSweepStatus({ data: { jobId: sweepJobId } }),
-          'Could not read sweep progress',
-        ),
-      )
-      if (cancelled) return
-
-      if (Either.isLeft(result) || !result.right) {
-        const message = Either.isLeft(result) ? result.left.message : 'Sweep job was not found'
-        setSweepNotice(message)
-        setSweeping(false)
-        setInFlight(new Set())
-        setSweepJobId(null)
-        return
-      }
-
-      const status = result.right
-      applySweepStatus(status)
-      if (status.done + status.failed >= status.total) {
-        setSweeping(false)
-        setSweepJobId(null)
-        if (status.failed > 0) {
-          const firstError = status.failures[0]?.error ?? 'Unknown error'
-          setSweepNotice(
-            `${status.done} unstarred · ${status.failed} failed and stayed in the list. First error: ${firstError}. ${getSweepFailureHint(firstError)}`,
+    if (filter === 'flagged') {
+      filtered = filtered
+        .filter((repo) => repo.signals.length > 0)
+        .sort((left, right) => right.score - left.score)
+    } else if (filter === 'ai') {
+      filtered = filtered
+        .filter((repo) => verdicts[repo.fullName] !== undefined)
+        .sort((left, right) => {
+          const leftVerdict = verdicts[left.fullName]
+          const rightVerdict = verdicts[right.fullName]
+          if (!leftVerdict || !rightVerdict) return 0
+          return (
+            VERDICT_ORDER[leftVerdict.verdict] -
+            VERDICT_ORDER[rightVerdict.verdict]
           )
-        }
-        return
-      }
-
-      pollTimer = setTimeout(poll, SWEEP_POLL_INTERVAL_MS)
+        })
+    } else if (filter === 'nlp') {
+      const rank = new Map(
+        (nlpMatches ?? []).map((fullName, index) => [fullName, index]),
+      )
+      filtered = filtered
+        .filter((repo) => rank.has(repo.fullName))
+        .sort(
+          (left, right) =>
+            (rank.get(left.fullName) ?? Number.MAX_SAFE_INTEGER) -
+            (rank.get(right.fullName) ?? Number.MAX_SAFE_INTEGER),
+        )
     }
 
-    void poll()
-    return () => {
-      cancelled = true
-      if (pollTimer) clearTimeout(pollTimer)
-    }
-  }, [sweepJobId])
-
-  const live = useMemo(() => repos.filter((repo) => !removed.has(repo.fullName)), [repos, removed])
-  const flagged = useMemo(() => live.filter((repo) => repo.signals.length > 0), [live])
-  const reviewedCount = useMemo(
-    () => live.filter((repo) => verdicts[repo.fullName] !== undefined).length,
-    [live, verdicts],
+    const normalizedQuery = query.trim().toLowerCase()
+    if (!normalizedQuery) return filtered
+    return filtered.filter(
+      (repo) =>
+        repo.fullName.toLowerCase().includes(normalizedQuery) ||
+        repo.description?.toLowerCase().includes(normalizedQuery),
+    )
+  }, [filter, nlpMatches, query, removed, repositories.repos, verdicts])
+  const liveNames = useMemo(
+    () =>
+      new Set(
+        repositories.starredNames.filter(
+          (fullName) => !removed.has(fullName),
+        ),
+      ),
+    [repositories.starredNames, removed],
   )
-  const liveNames = useMemo(() => new Set(live.map((repo) => repo.fullName)), [live])
-  const visible = useMemo(
-    () => getVisibleRepos({ repos: live, flagged, filter, query, verdicts, nlpMatches }),
-    [live, flagged, filter, query, verdicts, nlpMatches],
+
+  const allVisibleSelected =
+    visible.length > 0 && visible.every((repo) => selected.has(repo.fullName))
+  const someVisibleSelected = visible.some((repo) =>
+    selected.has(repo.fullName),
   )
 
-  const allVisibleSelected = visible.length > 0 && visible.every((repo) => selected.has(repo.fullName))
-  const someVisibleSelected = visible.some((repo) => selected.has(repo.fullName))
+  function setFilter(nextFilter: DashboardFilter) {
+    setFilterState(nextFilter)
+  }
 
   function toggleRepo(fullName: string, next: boolean) {
-    setSelected((previous) => {
-      const updated = new Set(previous)
-      if (next) updated.add(fullName)
-      else updated.delete(fullName)
+    const repo = visible.find((candidate) => candidate.fullName === fullName)
+    if (next && !repo) return
+
+    setSelectedRepos((previous) => {
+      const updated = new Map(previous)
+      if (next && repo) {
+        updated.set(fullName, {
+          owner: repo.owner,
+          name: repo.name,
+          fullName: repo.fullName,
+        })
+      } else {
+        updated.delete(fullName)
+      }
       return updated
     })
   }
 
   function toggleAllVisible(next: boolean) {
-    setSelected((previous) => {
-      const updated = new Set(previous)
+    setSelectedRepos((previous) => {
+      const updated = new Map(previous)
       for (const repo of visible) {
-        if (next) updated.add(repo.fullName)
-        else updated.delete(repo.fullName)
+        if (next) {
+          updated.set(repo.fullName, {
+            owner: repo.owner,
+            name: repo.name,
+            fullName: repo.fullName,
+          })
+        } else {
+          updated.delete(repo.fullName)
+        }
       }
       return updated
     })
   }
 
-  async function analyze() {
+  async function analyze(prompt?: string) {
+    const normalizedPrompt = prompt?.trim()
     setAnalyzing(true)
     setSearchError(null)
 
-    const candidates = buildAiCandidates(flagged)
     const result = await runResult(
-      attempt(() => analyzeStars({ data: { candidates } }), 'AI review failed — try again.'),
+      attempt(
+        () => analyzeStars({ data: { prompt: normalizedPrompt } }),
+        'AI review failed — try again.',
+      ),
     )
 
     setAnalyzing(false)
@@ -194,20 +232,31 @@ export function useDashboard({
 
     setVerdicts((previous) => {
       const updated = { ...previous }
-      for (const verdict of result.right.verdicts) updated[verdict.fullName] = verdict
+      for (const verdict of result.right.verdicts)
+        updated[verdict.fullName] = verdict
       return updated
     })
-    setFilter('ai')
+
+    if (normalizedPrompt) {
+      setNlpMatches(result.right.matches ?? [])
+      setFilter('nlp')
+    } else {
+      setFilter('ai')
+    }
+    setRefreshVersion((version) => version + 1)
   }
 
   async function askAi() {
-    const normalizedQuery = query.trim()
-    if (!normalizedQuery || searching) return
+    if (searching) return
+
+    const search = dashboardSearchSchema.safeParse({ query, scope })
+    if (!search.success) return
+    const { query: normalizedQuery } = search.data
 
     const wantsStarred = scope === 'starred' || scope === 'both'
     const wantsGithub = scope === 'github' || scope === 'both'
 
-    if (wantsStarred && !aiEnabled) {
+    if (wantsStarred && !repositories.aiEnabled) {
       setSearchError(
         'Semantic search over your stars needs an AI provider. GitHub-wide search works without it — switch the scope.',
       )
@@ -221,18 +270,11 @@ export function useDashboard({
         () =>
           Promise.all([
             wantsStarred
-              ? semanticFilterStars({
-                  data: {
-                    query: normalizedQuery,
-                    repos: live.map((repo) => ({
-                      fullName: repo.fullName,
-                      description: repo.description,
-                      language: repo.language,
-                    })),
-                  },
-                })
-              : Promise.resolve(null),
-            wantsGithub ? searchGithub({ data: { query: normalizedQuery } }) : Promise.resolve(null),
+              ? semanticFilterStars({ data: { query: normalizedQuery } })
+              : null,
+            wantsGithub
+              ? searchGithub({ data: { query: normalizedQuery } })
+              : null,
           ]),
         'Search failed — try again.',
       ),
@@ -286,17 +328,107 @@ export function useDashboard({
       return
     }
 
-    setGhStarredOverride((previous) => ({ ...previous, [result.fullName]: !currentlyStarred }))
-    if (liveNames.has(result.fullName) && currentlyStarred) {
+    setGhStarredOverride((previous) => ({
+      ...previous,
+      [result.fullName]: !currentlyStarred,
+    }))
+    if (currentlyStarred) {
       setRemoved((previous) => new Set(previous).add(result.fullName))
-    } else if (!currentlyStarred) {
+      setSelectedRepos((previous) => {
+        const updated = new Map(previous)
+        updated.delete(result.fullName)
+        return updated
+      })
+      setRefreshVersion((version) => version + 1)
+    } else {
       setRemoved((previous) => {
         const updated = new Set(previous)
         updated.delete(result.fullName)
         return updated
       })
+      setRefreshVersion((version) => version + 1)
     }
   }
+
+  function applySweepStatus(status: SweepStatus) {
+    setInFlight(new Set(status.pending))
+    setRemoved((previous) => new Set([...previous, ...status.completed]))
+    setSelectedRepos((previous) => {
+      const updated = new Map(previous)
+      for (const fullName of status.completed) updated.delete(fullName)
+      return updated
+    })
+  }
+
+  useEffect(() => {
+    if (!repositories.queueEnabled) return
+    let cancelled = false
+
+    void runResult(
+      attempt(() => getActiveSweeps(), 'Could not resume the active sweep'),
+    ).then((result) => {
+      if (cancelled || Either.isLeft(result) || result.right.length === 0)
+        return
+      const active = result.right[0]
+      applySweepStatus(active)
+      setSweeping(true)
+      setSweepJobId(active.jobId)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [repositories.queueEnabled])
+
+  useEffect(() => {
+    if (!sweepJobId) return
+    let cancelled = false
+    let pollTimer: ReturnType<typeof setTimeout> | undefined
+
+    const poll = async () => {
+      const result = await runResult(
+        attempt(
+          () => getSweepStatus({ data: { jobId: sweepJobId } }),
+          'Could not read sweep progress',
+        ),
+      )
+      if (cancelled) return
+
+      if (Either.isLeft(result) || !result.right) {
+        const message = Either.isLeft(result)
+          ? result.left.message
+          : 'Sweep job was not found'
+        setSweepNotice(message)
+        setSweeping(false)
+        setInFlight(new Set())
+        setSweepJobId(null)
+        return
+      }
+
+      const status = result.right
+      applySweepStatus(status)
+      if (status.done + status.failed >= status.total) {
+        setSweeping(false)
+        setSweepJobId(null)
+        setRefreshVersion((version) => version + 1)
+        if (status.failed > 0) {
+          const firstError = status.failures[0]?.error ?? 'Unknown error'
+          setSweepNotice(
+            `${status.done} unstarred · ${status.failed} failed and stayed in the list. First error: ${firstError}. ${getSweepFailureHint(firstError)}`,
+          )
+        }
+        return
+      }
+
+      pollTimer = setTimeout(poll, SWEEP_POLL_INTERVAL_MS)
+    }
+
+    void poll()
+    return () => {
+      cancelled = true
+      if (pollTimer) clearTimeout(pollTimer)
+    }
+  }, [sweepJobId])
 
   function requestUnstar() {
     if (!confirming) {
@@ -309,22 +441,17 @@ export function useDashboard({
 
   async function unstarSelected() {
     if (sweeping) return
-    const targets = live.filter((repo) => selected.has(repo.fullName))
+    const targets = [...selectedRepos.values()]
     if (targets.length === 0) return
 
     setSweeping(true)
     setSweepNotice(null)
     setInFlight(new Set(targets.map((repo) => repo.fullName)))
 
-    if (queueEnabled) {
+    if (repositories.queueEnabled) {
       const result = await runResult(
         attempt(
-          () =>
-            startSweep({
-              data: {
-                targets: targets.map(({ owner, name, fullName }) => ({ owner, name, fullName })),
-              },
-            }),
+          () => startSweep({ data: { targets } }),
           'Could not queue this sweep',
         ),
       )
@@ -356,15 +483,18 @@ export function useDashboard({
 
       if (Either.isRight(result)) {
         setRemoved((previous) => new Set(previous).add(repo.fullName))
-        setSelected((previous) => {
-          const updated = new Set(previous)
+        setSelectedRepos((previous) => {
+          const updated = new Map(previous)
           updated.delete(repo.fullName)
           return updated
         })
       } else {
         failed++
         firstError ??= result.left.message
-        console.error(`Unstar failed for ${repo.fullName}:`, originalError(result.left))
+        console.error(
+          `Unstar failed for ${repo.fullName}:`,
+          originalError(result.left),
+        )
       }
 
       setInFlight((previous) => {
@@ -380,17 +510,19 @@ export function useDashboard({
       )
     }
     setSweeping(false)
+    setRefreshVersion((version) => version + 1)
   }
 
   const tabs: DashboardTab[] = FILTER_LABELS.map(({ value, label }) => ({
     value,
     label,
-    count: value === 'flagged' ? flagged.length || null : null,
+    count: value === 'flagged' ? repositories.flaggedCount || null : null,
   }))
-  if (nlpMatches !== null) tabs.push({ value: 'nlp', label: 'AI matches', count: nlpMatches.length })
+  if (nlpMatches !== null)
+    tabs.push({ value: 'nlp', label: 'AI matches', count: nlpMatches.length })
 
   return {
-    aiEnabled,
+    aiEnabled: repositories.aiEnabled,
     allVisibleSelected,
     analyze,
     analyzing,
@@ -400,15 +532,17 @@ export function useDashboard({
     confirming,
     dismissSweepNotice: () => setSweepNotice(null),
     filter,
-    flaggedCount: flagged.length,
+    flaggedCount: repositories.flaggedCount,
     ghBusy,
     ghResults,
     inFlight,
     isGhStarred,
-    liveCount: live.length,
+    liveCount: repositories.liveCount,
     nlpMatches,
+    pageLoading,
     query,
-    reviewedCount,
+    refreshPage: () => setRefreshVersion((version) => version + 1),
+    reviewedCount: repositories.reviewedCount,
     requestUnstar,
     scope,
     searchError,
@@ -427,6 +561,7 @@ export function useDashboard({
     toggleGhStar,
     toggleRepo,
     translatedQuery,
+    truncated: repositories.truncated,
     verdicts,
     visible,
   }

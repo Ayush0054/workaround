@@ -1,13 +1,17 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
+import { LandingPage } from '#/pages/Landing'
+import { landingSearchSchema } from '#/pages/Landing/schemas'
+import { getAuth } from '#/server/routes'
 
 export const Route = createFileRoute('/')({
-  validateSearch: (search: Record<string, unknown>): { error?: string } => ({
-    error: typeof search.error === 'string' ? search.error : undefined,
-  }),
-  beforeLoad: ({ search }) => {
-    throw redirect({
-      to: '/dashboard',
-      search: search.error ? { error: search.error } : {},
-    })
+  validateSearch: landingSearchSchema,
+  beforeLoad: async () => {
+    if (await getAuth()) throw redirect({ to: '/dashboard' })
   },
+  component: LandingRoute,
 })
+
+function LandingRoute() {
+  const { error } = Route.useSearch()
+  return <LandingPage error={error} />
+}

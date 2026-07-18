@@ -1,12 +1,6 @@
 import { useSession } from '@tanstack/react-start/server'
 import { env } from './env'
-
-export type SessionData = {
-  token?: string
-  login?: string
-  name?: string | null
-  avatarUrl?: string
-}
+import type { SessionData } from './types/session'
 
 export function getAppSession() {
   return useSession<SessionData>({

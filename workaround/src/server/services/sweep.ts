@@ -1,37 +1,22 @@
 import { Effect, Either } from 'effect'
-import { attempt, getErrorMessage, originalError, runResult } from '#/lib/errors'
-import { seal, unseal } from './crypto'
-import { env } from './env'
+import {
+  attempt,
+  getErrorMessage,
+  originalError,
+  runResult,
+} from '#/lib/errors'
+import { seal, unseal } from '../utils/crypto'
+import { env } from '../env'
+import { requireSession } from './auth'
 import { GitHubApiError, unstarRepo } from './github'
+import { trackEvent } from './analytics'
 
-export type SweepMessage = {
-  jobId: string
-  owner: string
-  name: string
-  fullName: string
-  sealedToken: string
-}
-
-export type SweepTarget = {
-  owner: string
-  name: string
-  fullName: string
-}
-
-export type SweepFailure = {
-  fullName: string
-  error: string
-}
-
-export type SweepStatus = {
-  jobId: string
-  total: number
-  done: number
-  failed: number
-  pending: string[]
-  completed: string[]
-  failures: SweepFailure[]
-}
+import type {
+  SweepFailure,
+  SweepMessage,
+  SweepStatus,
+  SweepTarget,
+} from '#/types/sweep'
 
 const ITEM_INSERT_CHUNK = 20
 const QUEUE_SEND_CHUNK = 100
@@ -42,42 +27,35 @@ export function queueConfigured(): boolean {
   return Boolean(env.DB && env.UNSTAR_QUEUE)
 }
 
+export async function startSweepForCurrentUser(
+  targets: SweepTarget[],
+): Promise<SweepStatus> {
+  if (!queueConfigured())
+    throw new Error('Cloudflare Queue and D1 bindings are not configured')
+  if (targets.length === 0) throw new Error('Select at least one repository')
+  const { login, token } = await requireSession()
+  const status = await enqueueSweep(login, token, targets)
+  trackEvent({ name: 'sweep_started', value: targets.length })
+  return status
+}
+
+export async function getSweepStatusForCurrentUser(
+  jobId: string,
+): Promise<SweepStatus | null> {
+  if (!queueConfigured()) return null
+  const { login } = await requireSession()
+  return sweepStatus(login, jobId)
+}
+
+export async function getActiveSweepsForCurrentUser(): Promise<SweepStatus[]> {
+  if (!queueConfigured()) return []
+  const { login } = await requireSession()
+  return activeSweeps(login)
+}
+
 function db(): D1Database {
   if (!env.DB) throw new Error('D1 binding DB is not configured')
   return env.DB
-}
-
-let schemaReady: Promise<unknown> | null = null
-
-function ensureSchema(): Promise<unknown> {
-  schemaReady ??= db().batch([
-    db().prepare(
-      `CREATE TABLE IF NOT EXISTS sweep_jobs (
-         job_id TEXT PRIMARY KEY,
-         login TEXT NOT NULL,
-         total INTEGER NOT NULL,
-         created_at INTEGER NOT NULL
-       )`,
-    ),
-    db().prepare(
-      `CREATE TABLE IF NOT EXISTS sweep_items (
-         job_id TEXT NOT NULL,
-         full_name TEXT NOT NULL,
-         owner TEXT NOT NULL,
-         name TEXT NOT NULL,
-         status TEXT NOT NULL DEFAULT 'pending',
-         error TEXT,
-         PRIMARY KEY (job_id, full_name)
-       )`,
-    ),
-    db().prepare(
-      'CREATE INDEX IF NOT EXISTS idx_sweep_jobs_login ON sweep_jobs (login, created_at)',
-    ),
-    db().prepare(
-      'CREATE INDEX IF NOT EXISTS idx_sweep_items_status ON sweep_items (job_id, status)',
-    ),
-  ])
-  return schemaReady
 }
 
 export async function enqueueSweep(
@@ -87,11 +65,11 @@ export async function enqueueSweep(
 ): Promise<SweepStatus> {
   const queue = env.UNSTAR_QUEUE
   if (!queue) throw new Error('Queue binding UNSTAR_QUEUE is not configured')
-  await ensureSchema()
-
   const jobId = crypto.randomUUID()
   await db()
-    .prepare('INSERT INTO sweep_jobs (job_id, login, total, created_at) VALUES (?, ?, ?, ?)')
+    .prepare(
+      'INSERT INTO sweep_jobs (job_id, login, total, created_at) VALUES (?, ?, ?, ?)',
+    )
     .bind(jobId, login, targets.length, Date.now())
     .run()
 
@@ -102,7 +80,14 @@ export async function enqueueSweep(
       .prepare(
         `INSERT OR IGNORE INTO sweep_items (job_id, full_name, owner, name) VALUES ${placeholders}`,
       )
-      .bind(...chunk.flatMap((target) => [jobId, target.fullName, target.owner, target.name]))
+      .bind(
+        ...chunk.flatMap((target) => [
+          jobId,
+          target.fullName,
+          target.owner,
+          target.name,
+        ]),
+      )
       .run()
   }
 
@@ -128,7 +113,11 @@ export async function enqueueSweep(
     if (Either.isLeft(published)) {
       const error = getErrorMessage(originalError(published.left))
       const unsent = targets.slice(index)
-      for (let itemIndex = 0; itemIndex < unsent.length; itemIndex += ITEM_INSERT_CHUNK) {
+      for (
+        let itemIndex = 0;
+        itemIndex < unsent.length;
+        itemIndex += ITEM_INSERT_CHUNK
+      ) {
         const chunk = unsent.slice(itemIndex, itemIndex + ITEM_INSERT_CHUNK)
         const placeholders = chunk.map(() => '?').join(', ')
         await db()
@@ -148,8 +137,10 @@ export async function enqueueSweep(
   return status
 }
 
-export async function sweepStatus(login: string, jobId: string): Promise<SweepStatus | null> {
-  await ensureSchema()
+export async function sweepStatus(
+  login: string,
+  jobId: string,
+): Promise<SweepStatus | null> {
   const job = await db()
     .prepare('SELECT total FROM sweep_jobs WHERE job_id = ? AND login = ?')
     .bind(jobId, login)
@@ -157,9 +148,15 @@ export async function sweepStatus(login: string, jobId: string): Promise<SweepSt
   if (!job) return null
 
   const items = await db()
-    .prepare('SELECT full_name, status, error FROM sweep_items WHERE job_id = ?')
+    .prepare(
+      'SELECT full_name, status, error FROM sweep_items WHERE job_id = ?',
+    )
     .bind(jobId)
-    .all<{ full_name: string; status: 'pending' | 'done' | 'failed'; error: string | null }>()
+    .all<{
+      full_name: string
+      status: 'pending' | 'done' | 'failed'
+      error: string | null
+    }>()
 
   const completed: string[] = []
   const pending: string[] = []
@@ -167,7 +164,10 @@ export async function sweepStatus(login: string, jobId: string): Promise<SweepSt
   for (const item of items.results) {
     if (item.status === 'done') completed.push(item.full_name)
     else if (item.status === 'failed') {
-      failures.push({ fullName: item.full_name, error: item.error ?? 'Unknown error' })
+      failures.push({
+        fullName: item.full_name,
+        error: item.error ?? 'Unknown error',
+      })
     } else pending.push(item.full_name)
   }
 
@@ -184,7 +184,6 @@ export async function sweepStatus(login: string, jobId: string): Promise<SweepSt
 
 /** Unfinished jobs from the last 24 hours, newest first. */
 export async function activeSweeps(login: string): Promise<SweepStatus[]> {
-  await ensureSchema()
   const jobs = await db()
     .prepare(
       `SELECT job_id FROM sweep_jobs
@@ -197,14 +196,20 @@ export async function activeSweeps(login: string): Promise<SweepStatus[]> {
   const statuses: SweepStatus[] = []
   for (const job of jobs.results) {
     const status = await sweepStatus(login, job.job_id)
-    if (status && status.done + status.failed < status.total) statuses.push(status)
+    if (status && status.done + status.failed < status.total)
+      statuses.push(status)
   }
   return statuses
 }
 
-async function itemAlreadyFinished(jobId: string, fullName: string): Promise<boolean> {
+async function itemAlreadyFinished(
+  jobId: string,
+  fullName: string,
+): Promise<boolean> {
   const item = await db()
-    .prepare('SELECT status FROM sweep_items WHERE job_id = ? AND full_name = ?')
+    .prepare(
+      'SELECT status FROM sweep_items WHERE job_id = ? AND full_name = ?',
+    )
     .bind(jobId, fullName)
     .first<{ status: string }>()
   return item?.status === 'done' || item?.status === 'failed'
@@ -249,15 +254,17 @@ async function processMessage(
     return null
   }
 
-  const retryAfter = cause instanceof GitHubApiError ? cause.retryAfterSeconds : undefined
+  const retryAfter =
+    cause instanceof GitHubApiError ? cause.retryAfterSeconds : undefined
   const retryDelaySeconds = retryAfter ?? 15 * message.attempts
   message.retry({ delaySeconds: retryDelaySeconds })
   return { retryDelaySeconds }
 }
 
 /** Process writes serially; Wrangler also caps this consumer at one concurrent invocation. */
-export async function handleSweepBatch(batch: MessageBatch<SweepMessage>): Promise<void> {
-  await ensureSchema()
+export async function handleSweepBatch(
+  batch: MessageBatch<SweepMessage>,
+): Promise<void> {
   for (const [index, message] of batch.messages.entries()) {
     const outcome = await processMessage(message)
     if (outcome) {
